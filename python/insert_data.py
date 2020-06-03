@@ -22,9 +22,9 @@ import math
 from datetime import datetime, date, timedelta
 import requests
 
+import pyodbc
 from axsis import Axsis
 import creds
-import pyodbc
 
 CONN = pyodbc.connect('Driver={SQL Server};Server=balt-sql311-prd;Database=DOT_DATA;Trusted_Connection=yes;')
 CURSOR = CONN.cursor()
