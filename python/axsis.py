@@ -117,7 +117,8 @@ class Axsis:
             'id_token': soup.find("input", {"name": "id_token"})["value"],
             'scope': soup.find("input", {"name": "scope"})["value"],
             'state': soup.find("input", {"name": "state"})["value"],
-            'session_state': soup.find("input", {"name": "session_state"})["value"]
+            'session_state': soup.find("input", {"name": "session_state"})["value"],
+            'access_token': soup.find("input", {"name": "access_token"})["value"]
         }
 
         response = self.session.post('https://webportal1.atsol.com/axsis.web/signin-oidc', headers=headers, data=data)
