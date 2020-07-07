@@ -3,6 +3,7 @@ Python wrapper around the Axsis Mobility Platform
 """
 import ast
 from datetime import date, timedelta
+import logging
 import requests
 
 import pandas as pd
@@ -10,6 +11,11 @@ from bs4 import BeautifulSoup
 
 ACCEPT_HEADER = ("text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/"
                  "signed-exchange;v=b3;q=0.9")
+
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
 
 
 class Axsis:
@@ -19,6 +25,8 @@ class Axsis:
         :param username: Case sensitive username used to log into Axsis
         :param password: Case sensitive password used to log into Axsis
         """
+        logging.debug("Creating session for user %s", username)
+
         self.session = requests.Session()
         self.username = username
         self.password = password
@@ -33,6 +41,7 @@ class Axsis:
         :param end_date: Last date to search, inclusive
         :return: Pandas data frame with the resulting data
         """
+        logging.info("Getting traffic counts from %s to %s", start_date, end_date)
         headers = {
             'Accept': 'application/json, text/javascript, */*; q=0.01',
             'Content-Type': 'application/json;charset=UTF-8',
@@ -65,14 +74,14 @@ class Axsis:
                                     params=params)
 
         columns = ['Location code', 'Description', 'First Traf Evt', 'Last Traf Evt'] + \
-                  [(start_date + timedelta(days=x)).strftime("%m/%d/%Y") for x in
-                   range((end_date - start_date).days + 1)]
+                  [(start_date + timedelta(days=x)).strftime("%m/%d/%Y")
+                   for x in range((end_date - start_date).days + 1)]
         return pd.read_excel(response.content, skiprows=[0, 1], names=columns)
 
     def _login(self):
         """
         Logs into the Axsis system, which is required to do anything with the API
-        :return:
+        :return: None
         """
         headers = {
             'Accept': ACCEPT_HEADER
@@ -121,7 +130,7 @@ class Axsis:
             'access_token': soup.find("input", {"name": "access_token"})["value"]
         }
 
-        response = self.session.post('https://webportal1.atsol.com/axsis.web/signin-oidc', headers=headers, data=data)
+        self.session.post('https://webportal1.atsol.com/axsis.web/signin-oidc', headers=headers, data=data)
 
         list_of_cookies = requests.utils.dict_from_cookiejar(self.session.cookies)
         for cookie_name in ['idsrv', 'idsrv.session', 'f5-axsisweb-lb-cookie', '_mvc3authcougar']:
@@ -181,6 +190,7 @@ class Axsis:
         :param report_name: ReportDescription to get the parameter details for
         :return: List of dictionaries of the parameter definitions
         """
+        logging.info("Getting report %s", report_name)
         self._get_client_id()
         report_id = self._get_reports(report_name)
         params = (
