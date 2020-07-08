@@ -250,7 +250,7 @@ def start_from_cmd_line():
     args = parser.parse_args()
     build_location_db()
 
-    allcams = True if args.allcams or not any([args.oh, args.rl, args.tc]) else False
+    allcams = bool(args.allcams or not any([args.oh, args.rl, args.tc]))
 
     if args.tc or allcams:
         # Process traffic counts from speed cameras

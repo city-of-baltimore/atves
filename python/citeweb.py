@@ -149,7 +149,7 @@ class CiteWeb:
                     continue
 
                 if hasattr(row.find_all('td')[1].p, 'text') and hasattr(row.find_all('td')[2].p, 'text') and \
-                    row.find_all('td')[1].p.text and row.find_all('td')[2].p.text:
+                        row.find_all('td')[1].p.text and row.find_all('td')[2].p.text:
 
                     act_start_date = datetime.strptime(row.find_all('td')[1].p.text, "%b %d, %Y %H:%M:%S")
                     act_end_date = datetime.strptime(row.find_all('td')[2].p.text, "%b %d, %Y %H:%M:%S")
