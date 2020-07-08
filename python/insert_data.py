@@ -201,9 +201,13 @@ def process_axsis_data(year, month, day, quantity):
     start_date = date(year, month, day)
     end_date = date(year, month, day) + timedelta(days=quantity)
     data = AXSIS_INTERFACE.get_traffic_counts(start_date, end_date)
-    data = [(i[0].strip(), i[3].strftime('%Y-%m-%d'), i[4])
-            for i in data.values.tolist()
-            if not math.isnan(i[4])]
+    data = data.to_dict('index')
+    columns = data[0].keys() - ['Location code', 'Description', 'First Traf Evt', 'Last Traf Evt']
+
+    data = [(row['Location code'], event_date, row[event_date])
+            for row in data.values()
+            for event_date in columns
+            if not math.isnan(row[event_date])]
 
     if data:
         CURSOR.executemany("""
@@ -238,30 +242,27 @@ def start_from_cmd_line():
                               'yesterday if not specified'))
     parser.add_argument('-n', '--numofdays', default=1, type=int,
                         help='Optional: Number of days to search, including the start date.')
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('-a', '--allcams', action='store_true', help="Process all camera types")
-    group.add_argument('-o', '--oh', action='store_true', help="Process only overheight cameras")
-    group.add_argument('-r', '--rl', action='store_true', help="Process only redlight cameras")
-    group.add_argument('-t', '--tc', action='store_true', help="Process only traffic counts")
+    parser.add_argument('-a', '--allcams', action='store_true', help="Process all camera types")
+    parser.add_argument('-o', '--oh', action='store_true', help="Process only overheight cameras")
+    parser.add_argument('-r', '--rl', action='store_true', help="Process only redlight cameras")
+    parser.add_argument('-t', '--tc', action='store_true', help="Process only traffic counts")
 
     args = parser.parse_args()
     build_location_db()
 
-    if args.tc or args.allcams:
+    allcams = True if args.allcams or not any([args.oh, args.rl, args.tc]) else False
+
+    if args.tc or allcams:
         # Process traffic counts from speed cameras
         process_axsis_data(args.year, args.month, args.day, args.numofdays)
 
     # Process red light and overheight cameras
-    if args.oh:
-        cam_type = citeweb.OVERHEIGHT
+    if allcams or (args.oh and args.rl):
+        process_citeweb_data(args.year, args.month, args.day, args.numofdays, citeweb.ALLCAMS)
+    elif args.oh:
+        process_citeweb_data(args.year, args.month, args.day, args.numofdays, citeweb.OVERHEIGHT)
     elif args.rl:
-        cam_type = citeweb.REDLIGHT
-    elif args.allcams:
-        cam_type = citeweb.ALLCAMS
-    else:
-        return
-
-    process_citeweb_data(args.year, args.month, args.day, args.numofdays, cam_type)
+        process_citeweb_data(args.year, args.month, args.day, args.numofdays, citeweb.REDLIGHT)
 
 
 if __name__ == '__main__':
