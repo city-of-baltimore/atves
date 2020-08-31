@@ -2,14 +2,14 @@
 Scrapes data for the ATVES program's speed, overheight and redlight cameras.
 
 Table holding the traffic counts from the speed cameras
-CREATE TABLE [dbo].[traffic_counts](
+CREATE TABLE [dbo].[atves_traffic_counts](
     [locationcode] [nchar](10) NULL,
     [date] [date] NULL,
     [count] [int] NULL
 )
 
 Table holding the ticket counts for the red light and overheight cameras
-CREATE TABLE [dbo].[ticket_cameras](
+CREATE TABLE [dbo].[atves_ticket_cameras](
     [id] [int] NOT NULL,
     [start_time] [datetime] NOT NULL,
     [end_time] [datetime] NOT NULL,
@@ -59,11 +59,11 @@ def build_location_db():
     :return: None
     """
     # Get the list of location codes in the traffic count database
-    CURSOR.execute("SELECT DISTINCT [locationcode] FROM [DOT_DATA].[dbo].[traffic_counts]")
+    CURSOR.execute("SELECT DISTINCT [locationcode] FROM [DOT_DATA].[dbo].[atves_traffic_counts]")
     location_codes_needed = [x[0].strip() for x in CURSOR.fetchall()]
 
     # Get the list of locations for the red light/overheight cameras
-    CURSOR.execute("SELECT DISTINCT [location] FROM [DOT_DATA].[dbo].[ticket_cameras]")
+    CURSOR.execute("SELECT DISTINCT [location] FROM [DOT_DATA].[dbo].[atves_ticket_cameras]")
     location_codes_needed += [x[0].strip() for x in CURSOR.fetchall()]
 
     CURSOR.execute("SELECT DISTINCT [locationcode] FROM [DOT_DATA].[dbo].[atves_cam_locations]")
@@ -78,7 +78,7 @@ def build_location_db():
             continue
         if location_code.startswith("BAL"):
             # Get a date when this camera existed
-            CURSOR.execute("SELECT * FROM [DOT_DATA].[dbo].[traffic_counts] WHERE locationcode = ?", location_code)
+            CURSOR.execute("SELECT * FROM [DOT_DATA].[dbo].[atves_traffic_counts] WHERE locationcode = ?", location_code)
             traffic_counts = CURSOR.fetchall()
 
             cam_date = datetime.strptime(traffic_counts[0][1], "%Y-%m-%d")
@@ -86,7 +86,7 @@ def build_location_db():
             location = [x for x in axsis_data.values.tolist() if x[0] == location_code][0][1]
             cam_type = 'SC'
         else:
-            CURSOR.execute("SELECT [equip_type] FROM [DOT_DATA].[dbo].[ticket_cameras] WHERE location = ?",
+            CURSOR.execute("SELECT [equip_type] FROM [DOT_DATA].[dbo].[atves_ticket_cameras] WHERE location = ?",
                            location_code)
             equipment_type = CURSOR.fetchall()[0][0].strip()
             if equipment_type in ['Gen3']:
@@ -175,12 +175,12 @@ def process_citeweb_data(year, month, day, quantity, cam_type=citeweb.ALLCAMS):
                           row['equip_type'], row['issued'], row['rejected']))
 
     CURSOR.executemany("""
-    MERGE [ticket_cameras] USING (
+    MERGE [atves_ticket_cameras] USING (
     VALUES
         (?, ?, ?, ?, ?, ?, ?, ?)
     ) AS vals (id, start_time, end_time, location, officer, equip_type, issued, rejected)
-    ON (ticket_cameras.start_time = vals.start_time AND
-        ticket_cameras.location = vals.location)
+    ON (atves_ticket_cameras.start_time = vals.start_time AND
+        atves_ticket_cameras.location = vals.location)
     WHEN NOT MATCHED THEN
         INSERT (id, start_time, end_time, location, officer, equip_type, issued, rejected)
         VALUES (id, start_time, end_time, location, officer, equip_type, issued, rejected);
@@ -211,12 +211,12 @@ def process_axsis_data(year, month, day, quantity):
 
     if data:
         CURSOR.executemany("""
-                    MERGE traffic_counts USING (
+                    MERGE atves_traffic_counts USING (
                     VALUES
                         (?, ?, ?)
                     ) AS vals (locationcode, [date], count)
-                    ON (traffic_counts.locationcode = vals.locationcode AND
-                        traffic_counts.date = vals.date)
+                    ON (atves_traffic_counts.locationcode = vals.locationcode AND
+                        atves_traffic_counts.date = vals.date)
                     WHEN MATCHED THEN
                         UPDATE SET
                         count = vals.count
