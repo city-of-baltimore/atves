@@ -76,7 +76,8 @@ class CiteWeb:
         hidden_tags = soup.find_all("input", type="hidden")
         tags = {}
         for tag in hidden_tags:
-            tags[tag['name']] = tag['value']
+            if tag.get('value') and tag.get('name'):
+                tags[tag['name']] = tag['value']
 
         # Post the payload to the site to log in
         self._state_vals['__VIEWSTATE'] = tags['__VIEWSTATE']

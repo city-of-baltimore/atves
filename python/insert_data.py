@@ -78,7 +78,8 @@ def build_location_db():
             continue
         if location_code.startswith("BAL"):
             # Get a date when this camera existed
-            CURSOR.execute("SELECT * FROM [DOT_DATA].[dbo].[atves_traffic_counts] WHERE locationcode = ?", location_code)
+            CURSOR.execute("SELECT * FROM [DOT_DATA].[dbo].[atves_traffic_counts] WHERE locationcode = ?",
+                           location_code)
             traffic_counts = CURSOR.fetchall()
 
             cam_date = datetime.strptime(traffic_counts[0][1], "%Y-%m-%d")
