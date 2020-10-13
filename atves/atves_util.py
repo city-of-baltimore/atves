@@ -148,7 +148,7 @@ def get_geo(street_address):
 
 def process_citeweb_data(year, month, day, quantity, cam_type=ALLCAMS):
     """
-    Inserts data into the database from red light and overheight cameras
+    Inserts data into the database from red light and over height cameras
     :param year: (int) Four digit year (used as the range start if 'quantity' is specified)
     :param month: (int) Month to pull (used as the range start if 'quantity' is
         specified)
@@ -190,7 +190,7 @@ def process_citeweb_data(year, month, day, quantity, cam_type=ALLCAMS):
 
 def process_axsis_data(year, month, day, quantity):
     """
-    Processes the red light and overhead camera data from Axsis
+    Processes the traffic count camera data from Axsis
     :param year: (int) Four digit year (used as the range start if 'quantity' is specified)
     :param month: (int) Month to pull (used as the range start if 'quantity' is specified)
     :param day: (int) Day to pull (used as the range start if 'quantity' is specified)
@@ -198,7 +198,7 @@ def process_axsis_data(year, month, day, quantity):
     :return:
     """
     start_date = date(year, month, day)
-    end_date = date(year, month, day) + timedelta(days=quantity)
+    end_date = date(year, month, day) + timedelta(days=(quantity - 1))
     data = AXSIS_INTERFACE.get_traffic_counts(start_date, end_date)
     data = data.to_dict('index')
     columns = data[0].keys() - ['Location code', 'Description', 'First Traf Evt', 'Last Traf Evt']
