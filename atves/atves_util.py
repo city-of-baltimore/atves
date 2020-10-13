@@ -224,6 +224,3 @@ def process_axsis_data(year, month, day, quantity):
                         VALUES (vals.locationcode, vals.date, vals.count);
                     """, data)
         CURSOR.commit()
-
-
-
