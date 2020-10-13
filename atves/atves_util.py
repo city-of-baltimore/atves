@@ -1,5 +1,5 @@
 """
-Scrapes data for the ATVES program's speed, overheight and redlight cameras.
+Code that interacts with the database, and with the axsis and citeweb libraries
 
 Table holding the traffic counts from the speed cameras
 CREATE TABLE [dbo].[atves_traffic_counts](
@@ -30,7 +30,6 @@ CREATE TABLE [dbo].[atves_cam_locations](
 )
 """
 
-import argparse
 import json
 import logging
 import math
@@ -38,14 +37,14 @@ from datetime import datetime, date, timedelta
 import requests
 
 import pyodbc
-from axsis import Axsis
-import citeweb
-import creds
+from .axsis import Axsis
+from .citeweb import CiteWeb, ALLCAMS
+from .creds import AXSIS_USERNAME, AXSIS_PASSWORD, CITEWEB_USERNAME, CITEWEB_PASSWORD
 
 
 CONN = pyodbc.connect('Driver={SQL Server};Server=balt-sql311-prd;Database=DOT_DATA;Trusted_Connection=yes;')
 CURSOR = CONN.cursor()
-AXSIS_INTERFACE = Axsis(username=creds.AXSIS_USERNAME, password=creds.AXSIS_PASSWORD)
+AXSIS_INTERFACE = Axsis(username=AXSIS_USERNAME, password=AXSIS_PASSWORD)
 
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(message)s',
@@ -68,7 +67,6 @@ def build_location_db():
 
     CURSOR.execute("SELECT DISTINCT [locationcode] FROM [DOT_DATA].[dbo].[atves_cam_locations]")
     location_codes_existing = [x[0].strip() for x in CURSOR.fetchall()]
-    # location_codes_existing = [x[0].strip() for x in CURSOR.fetchall()]
 
     diff = list(set(location_codes_needed) - set(location_codes_existing))
 
@@ -148,7 +146,7 @@ def get_geo(street_address):
     return latitude, longitude
 
 
-def process_citeweb_data(year, month, day, quantity, cam_type=citeweb.ALLCAMS):
+def process_citeweb_data(year, month, day, quantity, cam_type=ALLCAMS):
     """
     Inserts data into the database from red light and overheight cameras
     :param year: (int) Four digit year (used as the range start if 'quantity' is specified)
@@ -160,7 +158,7 @@ def process_citeweb_data(year, month, day, quantity, cam_type=citeweb.ALLCAMS):
         citeweb.ALLCAMS (default: citeweb.ALLCAMS)
     :return: None
     """
-    cw_interface = citeweb.CiteWeb(creds.CITEWEB_USERNAME, creds.CITEWEB_PASSWORD)
+    cw_interface = CiteWeb(CITEWEB_USERNAME, CITEWEB_PASSWORD)
     otp = input("Enter OTP value: ")
     cw_interface.login_otp(otp)
 
@@ -228,43 +226,4 @@ def process_axsis_data(year, month, day, quantity):
         CURSOR.commit()
 
 
-def start_from_cmd_line():
-    """Starts from the command line"""
-    yesterday = date.today() - timedelta(days=1)
-    parser = argparse.ArgumentParser(description='Traffic count importer')
-    parser.add_argument('-m', '--month', type=int, default=yesterday.month,
-                        help=('Optional: Month of date we should start searching on (IE: 10 for Oct). Defaults to '
-                              'yesterday if not specified'))
-    parser.add_argument('-d', '--day', type=int, default=yesterday.day,
-                        help=('Optional: Day of date we should start searching on (IE: 5). Defaults to yesterday if '
-                              'not specified'))
-    parser.add_argument('-y', '--year', type=int, default=yesterday.year,
-                        help=('Optional: Four digit year we should start searching on (IE: 2020). Defaults to '
-                              'yesterday if not specified'))
-    parser.add_argument('-n', '--numofdays', default=1, type=int,
-                        help='Optional: Number of days to search, including the start date.')
-    parser.add_argument('-a', '--allcams', action='store_true', help="Process all camera types")
-    parser.add_argument('-o', '--oh', action='store_true', help="Process only overheight cameras")
-    parser.add_argument('-r', '--rl', action='store_true', help="Process only redlight cameras")
-    parser.add_argument('-t', '--tc', action='store_true', help="Process only traffic counts")
 
-    args = parser.parse_args()
-    build_location_db()
-
-    allcams = bool(args.allcams or not any([args.oh, args.rl, args.tc]))
-
-    if args.tc or allcams:
-        # Process traffic counts from speed cameras
-        process_axsis_data(args.year, args.month, args.day, args.numofdays)
-
-    # Process red light and overheight cameras
-    if allcams or (args.oh and args.rl):
-        process_citeweb_data(args.year, args.month, args.day, args.numofdays, citeweb.ALLCAMS)
-    elif args.oh:
-        process_citeweb_data(args.year, args.month, args.day, args.numofdays, citeweb.OVERHEIGHT)
-    elif args.rl:
-        process_citeweb_data(args.year, args.month, args.day, args.numofdays, citeweb.REDLIGHT)
-
-
-if __name__ == '__main__':
-    start_from_cmd_line()
