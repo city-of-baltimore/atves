@@ -252,8 +252,8 @@ class AtvesDatabase:
             or conduent.ALLCAMS (default: conduent.ALLCAMS)
         :return: None
         """
-        logging.info('Processing conduent reject reports from {} to {}'.format(start_date.strftime("%m/%d/%y"),
-                                                                               end_date.strftime("%m/%d/%y")))
+        logging.info('Processing conduent reject reports from %s to %s', start_date.strftime("%m/%d/%y"),
+                     end_date.strftime("%m/%d/%y"))
         data = self.conduent_interface.get_deployment_data(start_date, end_date, cam_type)
 
         if not data:
@@ -285,8 +285,8 @@ class AtvesDatabase:
         :param end_date: (datetime) End date of the report to pull
         :return:
         """
-        logging.info('Processing conduent amber time report from {} to {}'.format(start_date.strftime("%m/%d/%y"),
-                                                                                  end_date.strftime("%m/%d/%y")))
+        logging.info('Processing conduent amber time report from %s to %s', start_date.strftime("%m/%d/%y"),
+                     end_date.strftime("%m/%d/%y"))
 
         data = self.conduent_interface.get_amber_time_rejects_report(start_date, end_date)
 
@@ -319,8 +319,8 @@ class AtvesDatabase:
         :param cam_type: (int) Either conduent.REDLIGHT or conduent.OVERHEIGHT
         :return:
         """
-        logging.info('Processing conduent data approval report from {} to {}'.format(start_date.strftime("%m/%d/%y"),
-                                                                                     end_date.strftime("%m/%d/%y")))
+        logging.info('Processing conduent data approval report from %s to %s', start_date.strftime("%m/%d/%y"),
+                     end_date.strftime("%m/%d/%y"))
         data = self.conduent_interface.get_approval_by_review_date_details(end_date, start_date, cam_type)
 
         if data.empty:
@@ -365,8 +365,8 @@ class AtvesDatabase:
                     ret = match.group(1)
             return ret
 
-        logging.info('Processing conduent location data reports from {} to {}'.format(start_date.strftime("%m/%d/%y"),
-                                                                                      end_date.strftime("%m/%d/%y")))
+        logging.info('Processing conduent location data reports from %s to %s', start_date.strftime("%m/%d/%y"),
+                     end_date.strftime("%m/%d/%y"))
         data = self.conduent_interface.get_client_summary_by_location(start_date, end_date, cam_type)
 
         if data.empty:
@@ -417,8 +417,8 @@ class AtvesDatabase:
         :param end_date: (datetime) End date of the report to pull
         :return:
         """
-        logging.info('Processing traffic count data from {} to {}'.format(start_date.strftime("%m/%d/%y"),
-                                                                          end_date.strftime("%m/%d/%y")))
+        logging.info('Processing traffic count data from %s to %s', start_date.strftime("%m/%d/%y"),
+                     end_date.strftime("%m/%d/%y"))
 
         # Get data from speed cameras
         axsis_data = self.axsis_interface.get_traffic_counts(start_date, end_date)
