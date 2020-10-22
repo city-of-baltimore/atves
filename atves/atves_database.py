@@ -355,6 +355,7 @@ class AtvesDatabase:
 
         def _get_int(value):
             """Gets int on the front of the string"""
+            pattern = re.compile(r"(\d*)")
             ret = 0
             if value != 'All Locations':
                 match = pattern.match(value)
@@ -373,9 +374,11 @@ class AtvesDatabase:
             return
 
         data_list = []
-        pattern = re.compile(r"(\d*)")
         for _, row in data.iterrows():
-            data_list.append((row['Date'], _get_int(row['Locations']), row['Section'], row['Details'],
+            location_id = _get_int(row['Locations'])
+            if location_id == 0:
+                continue
+            data_list.append((row['Date'], location_id, row['Section'], row['Details'],
                               row['PercentageDescription'], row['Issued'], row['InProcess'], row['NonViolations'],
                               row['ControllableRejects'], row['UncontrollableRejects'], row['PendingInitialapproval'],
                               row['PendingRejectapproval'], row['vcDescription'], row['DetailCount'],
@@ -389,7 +392,8 @@ class AtvesDatabase:
             controllable_rejects, uncontrollable_rejects, pending_initial_approval, pending_reject_approval,
             vcDescription, detail_count, order_by)
             ON (atves_by_location.date = vals.date AND
-                atves_by_location.location_code = vals.location_code)
+                atves_by_location.location_code = vals.location_code AND
+                atves_by_location.vcDescription = vals.vcDescription)
             WHEN NOT MATCHED THEN
                 INSERT (date, location_code, section, details, percentage_desc, issued, in_process, non_violations,
                     controllable_rejects, uncontrollable_rejects, pending_initial_approval, pending_reject_approval,
