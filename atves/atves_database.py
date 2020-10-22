@@ -106,8 +106,7 @@ class AtvesDatabase:
         conn = pyodbc.connect('Driver={SQL Server};Server=balt-sql311-prd;Database=DOT_DATA;Trusted_Connection=yes;')
         self.cursor = conn.cursor()
         self.axsis_interface = Axsis(username=AXSIS_USERNAME, password=AXSIS_PASSWORD)
-        self.conduent_interface = None
-        self._conduent_setup()
+        self.conduent_interface = Conduent(CONDUENT_USERNAME, CONDUENT_PASSWORD)
 
     def build_location_db(self):
         """
@@ -403,18 +402,6 @@ class AtvesDatabase:
                     vcDescription, detail_count, order_by);
         """, data_list)
         self.cursor.commit()
-
-    def _conduent_setup(self):
-        """
-        Initializes the connection with conduent
-        :return: conduent.conduent object
-        """
-        if self.conduent_interface is None:
-            self.conduent_interface = Conduent(CONDUENT_USERNAME, CONDUENT_PASSWORD)
-            # Disabling this for now, as it appears that we don't actually have to provide an OTP. Leaving the code
-            # here in case they fix it
-            # otp = input("Enter OTP value: ")
-            self.conduent_interface.login_otp(otp)
 
     def process_traffic_count_data(self, start_date: datetime, end_date: datetime):
         """
