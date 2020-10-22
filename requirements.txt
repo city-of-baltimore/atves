@@ -2,3 +2,5 @@ requests
 pandas
 bs4
 pyodbc
+xlrd
+retry

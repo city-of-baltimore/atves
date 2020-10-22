@@ -1,9 +1,9 @@
 """ atves main script """
 import argparse
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
-from atves.atves_util import build_location_db, process_axsis_data, process_citeweb_data
-from atves.citeweb import ALLCAMS, OVERHEIGHT, REDLIGHT
+from atves.atves_database import AtvesDatabase
+from atves.conduent import OVERHEIGHT, REDLIGHT
 
 yesterday = date.today() - timedelta(days=1)
 parser = argparse.ArgumentParser(description='Traffic count importer')
@@ -22,20 +22,33 @@ parser.add_argument('-a', '--allcams', action='store_true', help="Process all ca
 parser.add_argument('-o', '--oh', action='store_true', help="Process only over height cameras")
 parser.add_argument('-r', '--rl', action='store_true', help="Process only red light cameras")
 parser.add_argument('-t', '--tc', action='store_true', help="Process only traffic counts")
+parser.add_argument('-b', '--builddb', action='store_true', help="Rebuilds (or updates) the camera location database")
 
 args = parser.parse_args()
-build_location_db()
+ad = AtvesDatabase()
+
+start_date = datetime(args.year, args.month, args.day)
+end_date = (datetime(args.year, args.month, args.day, 23, 59, 59) + timedelta(days=args.numofdays - 1))
 
 all_cams = bool(args.allcams or not any([args.oh, args.rl, args.tc]))
 
-if args.tc or all_cams:
-    # Process traffic counts from speed cameras
-    process_axsis_data(args.year, args.month, args.day, args.numofdays)
+# Build the camera database
+if args.builddb:
+    ad.build_location_db()
 
-# Process red light and over height cameras
-if all_cams or (args.oh and args.rl):
-    process_citeweb_data(args.year, args.month, args.day, args.numofdays, ALLCAMS)
-elif args.oh:
-    process_citeweb_data(args.year, args.month, args.day, args.numofdays, OVERHEIGHT)
-elif args.rl:
-    process_citeweb_data(args.year, args.month, args.day, args.numofdays, REDLIGHT)
+# Process traffic cameras
+if args.tc or all_cams:
+    ad.process_traffic_count_data(start_date, end_date)
+
+# Process over height cameras
+if args.oh or all_cams:
+    ad.process_conduent_reject_numbers(start_date, end_date, OVERHEIGHT)
+    ad.process_conduent_data_by_location(start_date, end_date, OVERHEIGHT)
+    ad.process_conduent_data_approval_by_review_date(start_date, end_date, OVERHEIGHT)
+
+# Process red light cameras
+if args.rl or all_cams:
+    ad.process_conduent_reject_numbers(start_date, end_date, REDLIGHT)
+    ad.process_conduent_data_by_location(start_date, end_date, REDLIGHT)
+    ad.process_conduent_data_amber_time(start_date, end_date)
+    ad.process_conduent_data_approval_by_review_date(start_date, end_date, REDLIGHT)

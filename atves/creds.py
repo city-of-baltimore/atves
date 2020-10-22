@@ -2,5 +2,10 @@
 
 AXSIS_USERNAME = 'xxxx'
 AXSIS_PASSWORD = 'xxxx'
-CITEWEB_USERNAME = 'xxxx'
-CITEWEB_PASSWORD = 'xxxx'
+CONDUENT_USERNAME = 'xxxx'
+CONDUENT_PASSWORD = 'xxxx'
+
+# The following is a list of one or more Geocodio API keys. Replace 'xxxx' with your API keys
+GAPI = [
+    'xxxx'
+]

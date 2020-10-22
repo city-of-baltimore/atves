@@ -2,12 +2,14 @@
 Python wrapper around the Axsis Mobility Platform
 """
 import ast
-from datetime import date, timedelta
 import logging
-import requests
+from datetime import date, timedelta
 
 import pandas as pd
+import requests
+import xlrd
 from bs4 import BeautifulSoup
+from retry import retry
 
 ACCEPT_HEADER = ("text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/"
                  "signed-exchange;v=b3;q=0.9")
@@ -20,6 +22,7 @@ logging.basicConfig(
 
 class Axsis:
     """Interface to the Axsis Mobility Platform"""
+
     def __init__(self, username: str, password: str):
         """
         :param username: Case sensitive username used to log into Axsis
@@ -34,6 +37,9 @@ class Axsis:
         self.client_code = None
         self._login()
 
+    @retry(exceptions=(requests.exceptions.ConnectionError, xlrd.biffh.XLRDError),
+           tries=10,
+           delay=10)
     def get_traffic_counts(self, start_date: date, end_date: date):
         """
         Get the 'Site activity by traffic events' report
@@ -78,6 +84,9 @@ class Axsis:
                    for x in range((end_date - start_date).days + 1)]
         return pd.read_excel(response.content, skiprows=[0, 1], names=columns)
 
+    @retry(exceptions=requests.exceptions.ConnectionError,
+           tries=10,
+           delay=10)
     def _login(self):
         """
         Logs into the Axsis system, which is required to do anything with the API
@@ -139,6 +148,9 @@ class Axsis:
         for cookie_name in ['idsrv', 'idsrv.session', 'f5-axsisweb-lb-cookie', '_mvc3authcougar']:
             assert cookie_name in list_of_cookies.keys()
 
+    @retry(exceptions=requests.exceptions.ConnectionError,
+           tries=10,
+           delay=10)
     def _get_client_id(self):
         """
         Gets the client id and client code associated with self.username and assigns them to those attributes
@@ -157,6 +169,9 @@ class Axsis:
         self.client_id = soup.find_all('input', id='clientId')[0]['value']
         self.client_code = soup.find_all('input', id='clientCode')[0]['value']
 
+    @retry(exceptions=requests.exceptions.ConnectionError,
+           tries=10,
+           delay=10)
     def _get_reports(self, name):
         """
         Take the response to GetReports and get the required report number
@@ -187,6 +202,9 @@ class Axsis:
 
         return 0
 
+    @retry(exceptions=requests.exceptions.ConnectionError,
+           tries=10,
+           delay=10)
     def get_reports_detail(self, report_name: str):
         """
 
