@@ -411,7 +411,9 @@ class AtvesDatabase:
         """
         if self.conduent_interface is None:
             self.conduent_interface = Conduent(CONDUENT_USERNAME, CONDUENT_PASSWORD)
-            otp = input("Enter OTP value: ")
+            # Disabling this for now, as it appears that we don't actually have to provide an OTP. Leaving the code
+            # here in case they fix it
+            # otp = input("Enter OTP value: ")
             self.conduent_interface.login_otp(otp)
 
     def process_traffic_count_data(self, start_date: datetime, end_date: datetime):
