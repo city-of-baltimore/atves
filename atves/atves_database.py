@@ -47,7 +47,7 @@ CREATE TABLE [dbo].[atves_approval_by_review_date_details](
     [disapproved] [int] NOT NULL,
     [approved] [int] NOT NULL,
     [officer] [nvarchar](100),
-    [citation_no] [int] NOT NULL PRIMARY KEY,
+    [citation_no] [nvarchar](20) NOT NULL PRIMARY KEY,
     [violation_date] [datetime2],
     [review_status] varchar(20),
     [review_datetime] [datetime2]
@@ -158,9 +158,9 @@ class AtvesDatabase:
 
             geo = geocoder.geocode("{}, Baltimore, MD".format(ret['Location']))
 
-            data_list.append((ret['Site Code'], ret['Location'], geo.get('Latitude'), geo.get('Longitude'),
-                              ret['Cam Type'], ret['Effective Date'], ret['Speed Limit'],
-                              bool(ret['Status'] == 'Active')))
+            data_list.append((str(ret['Site Code']), str(ret['Location']), float(geo.get('Latitude')),
+                              float(geo.get('Longitude')), str(ret['Cam Type']), ret['Effective Date'],
+                              int(ret['Speed Limit']), bool(ret['Status'] == 'Active')))
 
         # Insert the known good ones
         if data_list:
@@ -260,8 +260,8 @@ class AtvesDatabase:
 
         data_list = []
         for row in data:
-            data_list.append((row['id'], row['start_time'], row['end_time'], row['location'], row['officer'],
-                              row['equip_type'], row['issued'], row['rejected']))
+            data_list.append((int(row['id']), row['start_time'], row['end_time'], str(row['location']),
+                              str(row['officer']), str(row['equip_type']), int(row['issued']), int(row['rejected'])))
 
         self.cursor.executemany("""
         MERGE [atves_ticket_cameras] USING (
@@ -294,8 +294,8 @@ class AtvesDatabase:
 
         data_list = []
         for _, row in data.iterrows():
-            data_list.append((row['iLocationCode'], row['Deployment Number'], row['VioDate'],
-                              row['Amber Time'], row['Amber Reject Code'], row['Event Number']))
+            data_list.append((int(row['iLocationCode']), int(row['Deployment Number']), row['VioDate'],
+                              float(row['Amber Time']), str(row['Amber Reject Code']), int(row['Event Number'])))
 
         self.cursor.executemany("""
             MERGE [atves_amber_time_rejects] USING(
@@ -328,8 +328,8 @@ class AtvesDatabase:
         data_list = []
         for _, row in data.iterrows():
             review_date = "{} {}".format(row['Review Date'], row['st'])
-            data_list.append((row['Disapproved'], row['Approved'], row['Officer'], row['CitNum'], row['Vio Date'],
-                              row['Review Status'], review_date))
+            data_list.append((int(row['Disapproved']), int(row['Approved']), str(row['Officer']), str(row['CitNum']),
+                              row['Vio Date'], str(row['Review Status']), review_date))
 
         self.cursor.executemany("""
             MERGE [atves_approval_by_review_date_details] USING(
@@ -363,7 +363,7 @@ class AtvesDatabase:
                     ret = 9999
                 else:
                     ret = match.group(1)
-            return ret
+            return int(ret)
 
         logging.info('Processing conduent location data reports from %s to %s', start_date.strftime("%m/%d/%y"),
                      end_date.strftime("%m/%d/%y"))
@@ -377,10 +377,11 @@ class AtvesDatabase:
             location_id = _get_int(row['Locations'])
             if location_id == 0:
                 continue
-            data_list.append((row['Date'], location_id, row['Section'], row['Details'],
-                              row['PercentageDescription'], row['Issued'], row['InProcess'], row['NonViolations'],
-                              row['ControllableRejects'], row['UncontrollableRejects'], row['PendingInitialapproval'],
-                              row['PendingRejectapproval'], row['vcDescription'], row['DetailCount'],
+            data_list.append((row['Date'], location_id, str(row['Section']), str(row['Details']),
+                              str(row['PercentageDescription']), int(row['Issued']), int(row['InProcess']),
+                              int(row['NonViolations']), int(row['ControllableRejects']),
+                              int(row['UncontrollableRejects']), int(row['PendingInitialapproval']),
+                              int(row['PendingRejectapproval']), str(row['vcDescription']), int(row['DetailCount']),
                               _get_int(row['iOrderBy'])))
 
         self.cursor.executemany("""

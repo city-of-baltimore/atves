@@ -5,18 +5,18 @@ from datetime import date, datetime, timedelta
 from atves.atves_database import AtvesDatabase
 from atves.conduent import OVERHEIGHT, REDLIGHT
 
-yesterday = date.today() - timedelta(days=1)
+lastmonth = date.today() - timedelta(days=30)
 parser = argparse.ArgumentParser(description='Traffic count importer')
-parser.add_argument('-m', '--month', type=int, default=yesterday.month,
+parser.add_argument('-m', '--month', type=int, default=lastmonth.month,
                     help=('Optional: Month of date we should start searching on (IE: 10 for Oct). Defaults to '
                           'yesterday if not specified'))
-parser.add_argument('-d', '--day', type=int, default=yesterday.day,
+parser.add_argument('-d', '--day', type=int, default=lastmonth.day,
                     help=('Optional: Day of date we should start searching on (IE: 5). Defaults to yesterday if '
                           'not specified'))
-parser.add_argument('-y', '--year', type=int, default=yesterday.year,
+parser.add_argument('-y', '--year', type=int, default=lastmonth.year,
                     help=('Optional: Four digit year we should start searching on (IE: 2020). Defaults to '
                           'yesterday if not specified'))
-parser.add_argument('-n', '--numofdays', default=1, type=int,
+parser.add_argument('-n', '--numofdays', default=30, type=int,
                     help='Optional: Number of days to search, including the start date.')
 parser.add_argument('-a', '--allcams', action='store_true', help="Process all camera types")
 parser.add_argument('-o', '--oh', action='store_true', help="Process only over height cameras")
