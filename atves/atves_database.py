@@ -24,8 +24,8 @@ The camera location database looks like this
 CREATE TABLE [dbo].[atves_cam_locations](
     [locationcode] [nchar](100),
     [locationdescription] [nchar](100) NOT NULL,
-    [lat] [decimal](5, 3) NOT NULL,
-    [long] [decimal](5, 3) NOT NULL,
+    [lat] [decimal](6, 4) NOT NULL,
+    [long] [decimal](6, 4) NOT NULL,
     [cam_type] [nchar](2) NOT NULL,
     [effective_date] [date],
     [speed_limit] [int],
