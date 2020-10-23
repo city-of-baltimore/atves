@@ -320,7 +320,7 @@ class AtvesDatabase:
         """
         logging.info('Processing conduent data approval report from %s to %s', start_date.strftime("%m/%d/%y"),
                      end_date.strftime("%m/%d/%y"))
-        data = self.conduent_interface.get_approval_by_review_date_details(end_date, start_date, cam_type)
+        data = self.conduent_interface.get_approval_by_review_date_details(start_date, end_date, cam_type)
 
         if data.empty:
             return

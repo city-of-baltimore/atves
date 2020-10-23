@@ -466,7 +466,8 @@ class Conduent:
 
         # scrape the parameters that need to come from univReports.asp
         for name in scrape_params:
-            payload[name] = soup.find('input', {'name': name}).get('value')
+            val = soup.find('input', {'name': name}).get('value')
+            payload[name] = val if val is not None else ''
 
         # request the report, and get the filename where we need to download it
         resp = self.session.post('https://cw3.cite-web.com/citeweb3/univReports.asp',
@@ -599,4 +600,4 @@ class Conduent:
 
     @staticmethod
     def _convert_start_end_dates(start_date: datetime, end_date: datetime):
-        return start_date.strftime("%m/%d/%y"), end_date.strftime("%m/%d/%y")
+        return start_date.strftime("%m/%d/%Y"), end_date.strftime("%m/%d/%Y")
