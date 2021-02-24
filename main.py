@@ -27,8 +27,8 @@ parser.add_argument('-b', '--builddb', action='store_true', help="Rebuilds (or u
 args = parser.parse_args()
 ad = AtvesDatabase()
 
-start_date = datetime(args.year, args.month, args.day)
-end_date = (datetime(args.year, args.month, args.day, 23, 59, 59) + timedelta(days=args.numofdays - 1))
+start_date = date(args.year, args.month, args.day)
+end_date = (date(args.year, args.month, args.day) + timedelta(days=args.numofdays - 1))
 
 all_cams = bool(args.allcams or not any([args.oh, args.rl, args.tc]))
 

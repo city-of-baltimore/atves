@@ -80,23 +80,18 @@ get_daily_self_test
 get_pending_client_approval
 """
 
-import logging
 import math
 import re
 from datetime import datetime
 
-import pyodbc
-from bcgeocoder import Geocoder  # pylint:disable=import-error
+import pyodbc  # type: ignore
+from loguru import logger
 
-from .axsis import Axsis
-from .conduent import Conduent, ALLCAMS
-from .creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDUENT_PASSWORD
-from .creds import GAPI
-
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.INFO,
-    datefmt='%Y-%m-%d %H:%M:%S')
+from balt_geocoder.geocoder import APIFatalError, Geocoder
+from atves.axsis import Axsis
+from atves.conduent import Conduent, ALLCAMS
+from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDUENT_PASSWORD
+from atves.creds import GAPI
 
 
 class AtvesDatabase:
@@ -108,7 +103,7 @@ class AtvesDatabase:
         self.axsis_interface = Axsis(username=AXSIS_USERNAME, password=AXSIS_PASSWORD)
         self.conduent_interface = Conduent(CONDUENT_USERNAME, CONDUENT_PASSWORD)
 
-    def build_location_db(self):
+    def build_location_db(self) -> None:
         """
         Builds the location database with each camera and their lat/long
         :return: None
@@ -131,7 +126,7 @@ class AtvesDatabase:
         existing_location_codes = [str(x[0]).strip() for x in self.cursor.fetchall()]
         diff = list(set(location_codes) - set(existing_location_codes))
         if diff:
-            logging.warning("Missing location codes: %s", diff)
+            logger.warning("Missing location codes: {}", diff)
 
         self.cursor.execute("SELECT DISTINCT [location] FROM [DOT_DATA].[dbo].[atves_ticket_cameras]")
         locations = [str(x[0]).strip() for x in self.cursor.fetchall()]
@@ -140,9 +135,9 @@ class AtvesDatabase:
         existing_locations = [str(x[0]).strip() for x in self.cursor.fetchall()]
         diff = list(set(locations) - set(existing_locations))
         if diff:
-            logging.warning("Missing locations: %s", diff)
+            logger.warning("Missing locations: {}", diff)
 
-    def _build_db_conduent_red_light(self):
+    def _build_db_conduent_red_light(self) -> None:
         """Builds the camera location database for red light cameras"""
         failures = 0
         loc_id = 0
@@ -156,17 +151,20 @@ class AtvesDatabase:
                 failures += 1
                 continue
 
-            geo = geocoder.geocode("{}, Baltimore, MD".format(ret['Location']))
+            try:
+                geo = geocoder.geocode("{}, Baltimore, MD".format(ret['Location']))
 
-            data_list.append((str(ret['Site Code']), str(ret['Location']), float(geo.get('Latitude')),
-                              float(geo.get('Longitude')), str(ret['Cam Type']), ret['Effective Date'],
-                              int(ret['Speed Limit']), bool(ret['Status'] == 'Active')))
+                data_list.append((str(ret['site_code']), str(ret['location']), float(geo.get('latitude')),
+                                  float(geo.get('longitude')), str(ret['cam_type']), ret['effective_date'],
+                                  int(ret['speed_limit']), bool(ret['status'] == 'Active')))
+            except (RuntimeError, APIFatalError) as err:
+                logger.warning("Geocoder error: {}", err)
 
         # Insert the known good ones
         if data_list:
             self._insert_location_table_elements(data_list)
 
-    def _build_db_conduent_overheight(self):
+    def _build_db_conduent_overheight(self) -> None:
         """Builds the camera location database for over height cameras"""
         oh_list = self.conduent_interface.get_overheight_cameras()
         data_list = []
@@ -174,13 +172,14 @@ class AtvesDatabase:
 
         for location_code, location in oh_list:
             geo = geocoder.geocode("{}, Baltimore, MD".format(location))
-            data_list.append((location_code, location, geo.get('Latitude'), geo.get('Longitude'), 'OH', None, None,
-                              None))
+            lat = geo.get('latitude') if geo else None
+            lng = geo.get('longitude') if geo else None
+            data_list.append((location_code, location, lat, lng, 'OH', None, None, None))
 
         if data_list:
             self._insert_location_table_elements(data_list)
 
-    def _build_db_speed_cameras(self):
+    def _build_db_speed_cameras(self) -> None:
         """Builds the camera location database for speed cameras"""
         # Get the list of location codes in the traffic count database (AXSIS)
         self.cursor.execute("SELECT DISTINCT [locationcode] "
@@ -214,14 +213,9 @@ class AtvesDatabase:
                 continue
 
             geo = geocoder.geocode("{}, Baltimore, MD".format(location))
-            data_list.append((location_code,
-                              location,
-                              geo.get('Latitude'),
-                              geo.get('Longitude'),
-                              'SC',
-                              cam_date,
-                              None,
-                              None))
+            lat = geo.get('latitude') if geo else None
+            lng = geo.get('longitude') if geo else None
+            data_list.append((location_code, location, lat, lng, 'SC', cam_date, None, None))
 
         if data_list:
             self._insert_location_table_elements(data_list)
@@ -251,7 +245,7 @@ class AtvesDatabase:
             or conduent.ALLCAMS (default: conduent.ALLCAMS)
         :return: None
         """
-        logging.info('Processing conduent reject reports from %s to %s', start_date.strftime("%m/%d/%y"),
+        logger.info('Processing conduent reject reports from {} to {}', start_date.strftime("%m/%d/%y"),
                      end_date.strftime("%m/%d/%y"))
         data = self.conduent_interface.get_deployment_data(start_date, end_date, cam_type)
 
@@ -284,7 +278,7 @@ class AtvesDatabase:
         :param end_date: (datetime) End date of the report to pull
         :return:
         """
-        logging.info('Processing conduent amber time report from %s to %s', start_date.strftime("%m/%d/%y"),
+        logger.info('Processing conduent amber time report from {} to {}}', start_date.strftime("%m/%d/%y"),
                      end_date.strftime("%m/%d/%y"))
 
         data = self.conduent_interface.get_amber_time_rejects_report(start_date, end_date)
@@ -318,7 +312,7 @@ class AtvesDatabase:
         :param cam_type: (int) Either conduent.REDLIGHT or conduent.OVERHEIGHT
         :return:
         """
-        logging.info('Processing conduent data approval report from %s to %s', start_date.strftime("%m/%d/%y"),
+        logger.info('Processing conduent data approval report from {} to {}', start_date.strftime("%m/%d/%y"),
                      end_date.strftime("%m/%d/%y"))
         data = self.conduent_interface.get_approval_by_review_date_details(start_date, end_date, cam_type)
 
@@ -359,13 +353,13 @@ class AtvesDatabase:
             if value != 'All Locations':
                 match = pattern.match(value)
                 if match.lastindex < 1:
-                    logging.error("Unable to parse location %s", value)
+                    logger.error("Unable to parse location {}", value)
                     ret = 9999
                 else:
                     ret = match.group(1)
             return int(ret)
 
-        logging.info('Processing conduent location data reports from %s to %s', start_date.strftime("%m/%d/%y"),
+        logger.info('Processing conduent location data reports from {} to {}', start_date.strftime("%m/%d/%y"),
                      end_date.strftime("%m/%d/%y"))
         data = self.conduent_interface.get_client_summary_by_location(start_date, end_date, cam_type)
 
@@ -411,7 +405,7 @@ class AtvesDatabase:
         :param end_date: (datetime) End date of the report to pull
         :return:
         """
-        logging.info('Processing traffic count data from %s to %s', start_date.strftime("%m/%d/%y"),
+        logger.info('Processing traffic count data from {} to {}', start_date.strftime("%m/%d/%y"),
                      end_date.strftime("%m/%d/%y"))
 
         # Get data from speed cameras

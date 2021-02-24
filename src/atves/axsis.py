@@ -2,22 +2,17 @@
 Python wrapper around the Axsis Mobility Platform
 """
 import ast
-import logging
 from datetime import date, timedelta
 
-import pandas as pd
+import pandas as pd  # type: ignore
 import requests
-import xlrd
-from bs4 import BeautifulSoup
+import xlrd  # type: ignore
+from bs4 import BeautifulSoup  # type: ignore
+from loguru import logger
 from retry import retry
 
 ACCEPT_HEADER = ("text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/"
                  "signed-exchange;v=b3;q=0.9")
-
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.INFO,
-    datefmt='%Y-%m-%d %H:%M:%S')
 
 
 class Axsis:
@@ -28,7 +23,7 @@ class Axsis:
         :param username: Case sensitive username used to log into Axsis
         :param password: Case sensitive password used to log into Axsis
         """
-        logging.debug("Creating session for user %s", username)
+        logger.debug("Creating session for user {}", username)
 
         self.session = requests.Session()
         self.username = username
@@ -47,7 +42,7 @@ class Axsis:
         :param end_date: Last date to search, inclusive
         :return: Pandas data frame with the resulting data
         """
-        logging.info("Getting traffic counts from %s to %s", start_date, end_date)
+        logger.info("Getting traffic counts from {} to {}", start_date, end_date)
         headers = {
             'Accept': 'application/json, text/javascript, */*; q=0.01',
             'Content-Type': 'application/json;charset=UTF-8',
@@ -146,7 +141,9 @@ class Axsis:
 
         list_of_cookies = requests.utils.dict_from_cookiejar(self.session.cookies)
         for cookie_name in ['idsrv', 'idsrv.session', 'f5-axsisweb-lb-cookie', '_mvc3authcougar']:
-            assert cookie_name in list_of_cookies.keys()
+            if cookie_name not in list_of_cookies.keys():
+                raise AssertionError("Cookie {} not in list of valid cookie: {}".format(
+                    cookie_name, list_of_cookies.keys()))
 
     @retry(exceptions=requests.exceptions.ConnectionError,
            tries=10,
@@ -211,7 +208,7 @@ class Axsis:
         :param report_name: ReportDescription to get the parameter details for
         :return: List of dictionaries of the parameter definitions
         """
-        logging.info("Getting report %s", report_name)
+        logger.info("Getting report {}", report_name)
         self._get_client_id()
         report_id = self._get_reports(report_name)
         params = (

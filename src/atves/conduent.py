@@ -1,24 +1,21 @@
 """Wrapper for the Conduent website to get red light and over height ticket information"""
 import calendar
-import logging
 import re
 import urllib
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
-import pandas as pd
+import pandas as pd  # type: ignore
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup  # type: ignore
+from loguru import logger
 from retry import retry
+
+from atves.conduent_types import CameraType, ConduentResultsType
 
 # Camera type
 ALLCAMS = 0
 REDLIGHT = 1
 OVERHEIGHT = 2
-
-logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.INFO,
-    datefmt='%Y-%m-%d %H:%M:%S')
 
 
 class Conduent:
@@ -30,7 +27,7 @@ class Conduent:
         :param username: (str) Login to conduent account
         :param password: (str) Password to conduent account
         """
-        logging.debug("Creating interface with conduent (%s)", username)
+        logger.debug("Creating interface with conduent ({})", username)
         self.session = requests.Session()
         self._state_vals = {}
         self.deployment_server = None
@@ -57,6 +54,9 @@ class Conduent:
 
         resp = self.session.post('https://cw3.cite-web.com/loginhub/Main.aspx', data=payload)
         self._get_state_values(resp)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        if len(soup.find_all('input', {'name': 'txtOTP'})) != 1:
+            raise AssertionError("Login failure")
 
     @retry(exceptions=requests.exceptions.ConnectionError,
            tries=10,
@@ -98,7 +98,7 @@ class Conduent:
         id_tags = soup.find_all('input', {'value': 'Citeweb3'})
         if len(id_tags) > 0:
             if len(id_tags) != 1:
-                logging.warning("Expected only one id tag, but found multiple: %s", id_tags)
+                logger.warning("Expected only one id tag, but found multiple: {}", id_tags)
             pattern = re.compile(r"ID=(\d*)")
             self.session_id = pattern.search(str(id_tags[0])).group(1)
 
@@ -117,12 +117,23 @@ class Conduent:
     @retry(exceptions=requests.exceptions.ConnectionError,
            tries=10,
            delay=10)
-    def get_location_by_id(self, loc_id: int) -> object:
+    def get_location_by_id(self, loc_id: int) -> CameraType:
         """
 
         :param loc_id:
         :return:
         """
+        ret: CameraType = {
+            'site_code': None,
+            'location': None,
+            'jurisdiction': None,
+            'date_created': None,
+            'created_by': None,
+            'effective_date': None,
+            'speed_limit': None,
+            'status': None,
+            'cam_type': None}
+
         resp = self.session.get('https://cw3.cite-web.com/citeweb3/locationByID.asp?ID={}'.format(loc_id))
         if resp.status_code == 500:
             self._setup_report_request(REDLIGHT)
@@ -132,8 +143,8 @@ class Conduent:
         pattern = re.compile(r'Site Code:\s*(\d*)\s*(.*?)\s\s*Jurisdiction: (\S)\s*Date Created: (.*?)\s\s*Created By: '
                              r'(.*?)\s\s*Effective Date: (.*?)\s\s*Speed Limit: (\d*)\s\s*Status: (\w*)')
         if soup.select_one('p:contains("No location exists with the selected ID!")') is not None:
-            logging.info("No location for ID %s", loc_id)
-            return None
+            logger.info("No location for ID {}", loc_id)
+            return ret
 
         text = soup.select_one('p:contains("Effective Date")').get_text().replace(u'\xa0', ' ')
         cam_type = ''
@@ -143,15 +154,18 @@ class Conduent:
             cam_type = 'OH'
 
         results = pattern.search(text)
-        return {'Site Code': results.group(1),
-                'Location': results.group(2),
-                'Jurisdiction': results.group(3),
-                'Date Created': results.group(4),
-                'Created By': results.group(5),
-                'Effective Date': results.group(6),
-                'Speed Limit': results.group(7),
-                'Status': results.group(8),
-                'Cam Type': cam_type}
+        if results is None:
+            return ret
+
+        return {'site_code': results.group(1),
+                'location': results.group(2),
+                'jurisdiction': results.group(3),
+                'date_created': results.group(4),
+                'created_by': results.group(5),
+                'effective_date': results.group(6),
+                'speed_limit': results.group(7),
+                'status': results.group(8),
+                'cam_type': cam_type}
 
     @retry(exceptions=requests.exceptions.ConnectionError,
            tries=10,
@@ -179,16 +193,16 @@ class Conduent:
                 for x in soup.select('select[id="ComboBox0"] > option')
                 if x.text != 'All Locations']
 
-    def get_deployment_data(self, start_date: datetime, end_date: datetime, cam_type=ALLCAMS):
+    def get_deployment_data(self, start_date: date, end_date: date, cam_type=ALLCAMS) -> list[dict]:
         """
         Gets the values of the red light camera deployments, with the number of accepted and rejected tickets
-        :param start_date: (datetime) Start date of the report to pull
-        :param end_date: (datetime) End date of the report to pull
+        :param start_date: (date) Start date of the report to pull
+        :param end_date: (date) End date of the report to pull
         :param cam_type: Type of camera data to pull (use the constants conduent.REDLIGHT or conduent.OVERHEIGHT or
             conduent.ALLCAMS (default: conduent.ALLCAMS)
         :return: (list of dictionaries) Results with id, start_time, end_time, location, equip_type, accepted, rejected
         """
-        logging.info("Getting deployment information for %s - %s and cam type %s", start_date, end_date, cam_type)
+        logger.info("Getting deployment information for {} - {} and cam type {}", start_date, end_date, cam_type)
 
         if cam_type == ALLCAMS:
             ret = self._get_deployment_data(start_date, end_date, REDLIGHT)
@@ -224,7 +238,8 @@ class Conduent:
         :param location: Optional location search. Uses the codes from the website
         :return: pandas.core.frame.DataFrame
         """
-        assert cam_type in [REDLIGHT, OVERHEIGHT]
+        if cam_type not in [REDLIGHT, OVERHEIGHT]:
+            raise AssertionError("Cam type {} is unexpected".format(cam_type))
         if cam_type == REDLIGHT:
             report = '5575,302,Approval By Review Date - Details,1,false,true'
         else:
@@ -248,7 +263,9 @@ class Conduent:
         :param location: Optional location search. Uses the codes from the website
         :return: pandas.core.frame.DataFrame
         """
-        assert cam_type in [REDLIGHT, OVERHEIGHT]
+        if cam_type not in [REDLIGHT, OVERHEIGHT]:
+            raise AssertionError("Cam type {} is unexpected".format(cam_type))
+
         if cam_type == REDLIGHT:
             report = '5532,302,Approval Summary By Queue,1,false,true'
         else:
@@ -272,7 +289,9 @@ class Conduent:
         :param location: Optional location search. Uses the codes from the website
         :return: pandas.core.frame.DataFrame
         """
-        assert cam_type in [REDLIGHT, OVERHEIGHT]
+        if cam_type not in [REDLIGHT, OVERHEIGHT]:
+            raise AssertionError("Cam type {} is unexpected".format(cam_type))
+
         if cam_type == REDLIGHT:
             report = '5608,302,Client Summary By Location,1,false,true'
         else:
@@ -403,7 +422,9 @@ class Conduent:
         Downloads the pending client approval report (overheight cameras only)
         :return: pandas.core.frame.DataFrame
         """
-        assert cam_type in [REDLIGHT, OVERHEIGHT]
+        if cam_type not in [REDLIGHT, OVERHEIGHT]:
+            raise AssertionError("Cam type {} is unexpected".format(cam_type))
+
         if cam_type == REDLIGHT:
             report = '5579,302,Pending Client Approval,1,false,true'
         else:
@@ -478,8 +499,8 @@ class Conduent:
         try:
             report_file = pattern.search(soup.find('a', {'name': 'aGetReport'}).get('onclick')).group(0)
         except IndexError:
-            logging.error("There was an error with error generation. No file was generated. HTML output:\n\n")
-            logging.debug(resp.text)
+            logger.error("There was an error with error generation. No file was generated. HTML output:\n\n")
+            logger.debug(resp.text)
             return None
 
         # download the file and return it
@@ -532,14 +553,15 @@ class Conduent:
     @retry(exceptions=requests.exceptions.ConnectionError,
            tries=10,
            delay=10)
-    def _get_deployment_data(self, search_start_date: datetime, search_end_date: datetime, cam_type):
+    def _get_deployment_data(self, search_start_date: date, search_end_date: date, cam_type):
         """ Pull the data from the deployment section"""
-        assert (cam_type in [REDLIGHT, OVERHEIGHT])
+        if cam_type not in [REDLIGHT, OVERHEIGHT]:
+            raise AssertionError("Cam type {} is unexpected".format(cam_type))
 
         self._setup_report_request(cam_type)
 
         deploy_type = {REDLIGHT: 'DeplByMonth_BaltimoreRL.asp', OVERHEIGHT: 'DeplByMonth.asp'}
-        results = []
+        results: ConduentResultsType = []
 
         for cur_year, cur_month in self._month_year_iter(search_start_date.month,
                                                          search_start_date.year,
@@ -558,14 +580,14 @@ class Conduent:
             for row in table.find_all("tr"):
                 elements = row.find_all("td")
                 if len(elements) != 8:
-                    logging.debug("Skipping %s", elements)
+                    logger.debug("Skipping {}", elements)
                     continue
 
                 if hasattr(row.find_all('td')[1].p, 'text') and hasattr(row.find_all('td')[2].p, 'text') and \
                         row.find_all('td')[1].p.text and row.find_all('td')[2].p.text:
 
-                    act_start_date = datetime.strptime(row.find_all('td')[1].p.text, "%b %d, %Y %H:%M:%S")
-                    act_end_date = datetime.strptime(row.find_all('td')[2].p.text, "%b %d, %Y %H:%M:%S")
+                    act_start_date = datetime.strptime(row.find_all('td')[1].p.text, "%b %d, %Y %H:%M:%S").date()
+                    act_end_date = datetime.strptime(row.find_all('td')[2].p.text, "%b %d, %Y %H:%M:%S").date()
 
                     # Make sure we are within the date range
                     if act_start_date >= search_start_date and act_end_date <= search_end_date:
