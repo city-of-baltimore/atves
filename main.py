@@ -1,6 +1,6 @@
 """ atves main script """
 import argparse
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from atves.atves_database import AtvesDatabase
 from atves.conduent import OVERHEIGHT, REDLIGHT

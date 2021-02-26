@@ -82,12 +82,13 @@ get_pending_client_approval
 
 import math
 import re
-from datetime import datetime
+from datetime import date, datetime
+from typing import List
 
 import pyodbc  # type: ignore
 from loguru import logger
-
 from balt_geocoder.geocoder import APIFatalError, Geocoder
+
 from atves.axsis import Axsis
 from atves.conduent import Conduent, ALLCAMS
 from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDUENT_PASSWORD
@@ -152,11 +153,11 @@ class AtvesDatabase:
                 continue
 
             try:
-                geo = geocoder.geocode("{}, Baltimore, MD".format(ret['Location']))
-
-                data_list.append((str(ret['site_code']), str(ret['location']), float(geo.get('latitude')),
-                                  float(geo.get('longitude')), str(ret['cam_type']), ret['effective_date'],
-                                  int(ret['speed_limit']), bool(ret['status'] == 'Active')))
+                geo = geocoder.geocode("{}, Baltimore, MD".format(ret['location']))
+                lat = geo.get('latitude') if geo else None
+                lng = geo.get('longitude') if geo else None
+                data_list.append((str(ret['site_code']), str(ret['location']), lat, lng, str(ret['cam_type']),
+                                  ret['effective_date'], int(ret['speed_limit']), bool(ret['status'] == 'Active')))
             except (RuntimeError, APIFatalError) as err:
                 logger.warning("Geocoder error: {}", err)
 
@@ -220,7 +221,7 @@ class AtvesDatabase:
         if data_list:
             self._insert_location_table_elements(data_list)
 
-    def _insert_location_table_elements(self, data_list):
+    def _insert_location_table_elements(self, data_list: List) -> None:
         self.cursor.executemany("""
             MERGE [atves_cam_locations] USING (
             VALUES
@@ -236,7 +237,7 @@ class AtvesDatabase:
             """, data_list)
         self.cursor.commit()
 
-    def process_conduent_reject_numbers(self, start_date: datetime, end_date: datetime, cam_type=ALLCAMS):
+    def process_conduent_reject_numbers(self, start_date: date, end_date: date, cam_type=ALLCAMS) -> None:
         """
         Inserts data into the database from conduent rejection numbers
         :param start_date: (datetime) Start date of the report to pull
@@ -246,7 +247,7 @@ class AtvesDatabase:
         :return: None
         """
         logger.info('Processing conduent reject reports from {} to {}', start_date.strftime("%m/%d/%y"),
-                     end_date.strftime("%m/%d/%y"))
+                    end_date.strftime("%m/%d/%y"))
         data = self.conduent_interface.get_deployment_data(start_date, end_date, cam_type)
 
         if not data:
@@ -271,15 +272,15 @@ class AtvesDatabase:
 
         self.cursor.commit()
 
-    def process_conduent_data_amber_time(self, start_date: datetime, end_date: datetime):
+    def process_conduent_data_amber_time(self, start_date: date, end_date: date) -> None:
         """
 
-        :param start_date: (datetime) Start date of the report to pull
-        :param end_date: (datetime) End date of the report to pull
+        :param start_date: Start date of the report to pull
+        :param end_date: End date of the report to pull
         :return:
         """
         logger.info('Processing conduent amber time report from {} to {}}', start_date.strftime("%m/%d/%y"),
-                     end_date.strftime("%m/%d/%y"))
+                    end_date.strftime("%m/%d/%y"))
 
         data = self.conduent_interface.get_amber_time_rejects_report(start_date, end_date)
 
@@ -304,16 +305,16 @@ class AtvesDatabase:
 
         self.cursor.commit()
 
-    def process_conduent_data_approval_by_review_date(self, start_date: datetime, end_date: datetime, cam_type: int):
+    def process_conduent_data_approval_by_review_date(self, start_date: date, end_date: date, cam_type: int):
         """
 
-        :param start_date: (datetime) Start date of the report to pull
-        :param end_date: (datetime) End date of the report to pull
-        :param cam_type: (int) Either conduent.REDLIGHT or conduent.OVERHEIGHT
+        :param start_date: Start date of the report to pull
+        :param end_date: End date of the report to pull
+        :param cam_type: Either conduent.REDLIGHT or conduent.OVERHEIGHT
         :return:
         """
         logger.info('Processing conduent data approval report from {} to {}', start_date.strftime("%m/%d/%y"),
-                     end_date.strftime("%m/%d/%y"))
+                    end_date.strftime("%m/%d/%y"))
         data = self.conduent_interface.get_approval_by_review_date_details(start_date, end_date, cam_type)
 
         if data.empty:
@@ -337,12 +338,12 @@ class AtvesDatabase:
         """, data_list)
         self.cursor.commit()
 
-    def process_conduent_data_by_location(self, start_date: datetime, end_date: datetime, cam_type=ALLCAMS):
+    def process_conduent_data_by_location(self, start_date: date, end_date: date, cam_type: int = ALLCAMS):
         """
 
-        :param cam_type: (int) Either conduent.REDLIGHT or conduent.OVERHEIGHT
-        :param start_date: (datetime) Start date of the report to pull
-        :param end_date: (datetime) End date of the report to pull
+        :param cam_type: Either conduent.REDLIGHT or conduent.OVERHEIGHT
+        :param start_date: Start date of the report to pull
+        :param end_date: End date of the report to pull
         :return:
         """
 
@@ -360,7 +361,7 @@ class AtvesDatabase:
             return int(ret)
 
         logger.info('Processing conduent location data reports from {} to {}', start_date.strftime("%m/%d/%y"),
-                     end_date.strftime("%m/%d/%y"))
+                    end_date.strftime("%m/%d/%y"))
         data = self.conduent_interface.get_client_summary_by_location(start_date, end_date, cam_type)
 
         if data.empty:
@@ -398,15 +399,15 @@ class AtvesDatabase:
         """, data_list)
         self.cursor.commit()
 
-    def process_traffic_count_data(self, start_date: datetime, end_date: datetime):
+    def process_traffic_count_data(self, start_date: date, end_date: date):
         """
         Processes the traffic count camera data from Axsis and Conduent
-        :param start_date: (datetime) Start date of the report to pull
-        :param end_date: (datetime) End date of the report to pull
+        :param start_date: Start date of the report to pull
+        :param end_date: End date of the report to pull
         :return:
         """
         logger.info('Processing traffic count data from {} to {}', start_date.strftime("%m/%d/%y"),
-                     end_date.strftime("%m/%d/%y"))
+                    end_date.strftime("%m/%d/%y"))
 
         # Get data from speed cameras
         axsis_data = self.axsis_interface.get_traffic_counts(start_date, end_date)

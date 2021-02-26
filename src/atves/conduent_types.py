@@ -6,7 +6,7 @@ from datetime import datetime
 
 
 class CameraType(TypedDict):
-    """Structure used for camera location data"""
+    """Camera location data"""
     site_code: Optional[str]
     location: Optional[str]
     jurisdiction: Optional[str]
@@ -19,6 +19,7 @@ class CameraType(TypedDict):
 
 
 class ConduentResultsType(TypedDict):
+    """Return data from Conduent camera search"""
     id: str
     start_time: datetime
     end_time: datetime
@@ -27,3 +28,10 @@ class ConduentResultsType(TypedDict):
     equip_type: str
     issued: str
     rejected: str
+
+
+class SessionStateType(TypedDict):
+    """Tracking http state variables in the Conduent website"""
+    __VIEWSTATE: Optional[str]
+    __VIEWSTATEGENERATOR: Optional[str]
+    __EVENTVALIDATION: Optional[str]
