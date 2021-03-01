@@ -16,8 +16,8 @@ def test_invalid_user_pass():
 def test_get_location_by_id(conduent_fixture):
     """Tests get_location_by_id"""
     # Camera 1 is a red light cam, and camera 2003 is an overheight cam
-    for id in [1, 2003]:
-        ret = conduent_fixture.get_location_by_id(id)
+    for cam_type in [atves.conduent.REDLIGHT, atves.conduent.OVERHEIGHT]:
+        ret = conduent_fixture.get_location_by_id(1, cam_type)
         assert ret is not None
         assert len(ret) == 9
         assert str(ret['site_code']).isnumeric()
@@ -25,26 +25,34 @@ def test_get_location_by_id(conduent_fixture):
         assert str(ret['jurisdiction']).isnumeric()
         assert str(ret['date_created']) is not None
         assert str(ret['created_by']) is not None
-        assert str(ret['cam_type']) is not None
+        if cam_type == atves.conduent.REDLIGHT:
+            assert str(ret['cam_type']) == 'RL'
+        else:
+            assert str(ret['cam_type']) == 'OH'
         assert ret['effective_date'] is not None
         assert str(ret['speed_limit']).isnumeric()
         assert ret['status'] == 'Active'
 
 
-def test_get_lcoation_by_id_invalid(conduent_fixture):
+def test_get_location_by_id_invalid(conduent_fixture):
     """Tests get_location_by_id with a bad id"""
-    ret = conduent_fixture.get_location_by_id(9999999999)
-    assert ret is not None
-    assert len(ret) == 9
-    assert ret['site_code'] is None
-    assert ret['location'] is None
-    assert ret['jurisdiction'] is None
-    assert ret['date_created'] is None
-    assert ret['created_by'] is None
-    assert ret['cam_type'] is None
-    assert ret['effective_date'] is None
-    assert ret['speed_limit'] is None
-    assert ret['status'] is None
+    for cam_type in [atves.conduent.REDLIGHT, atves.conduent.OVERHEIGHT]:
+        ret = conduent_fixture.get_location_by_id(9999999999, cam_type)
+        assert ret is not None
+        assert len(ret) == 9
+        assert ret['site_code'] is None
+        assert ret['location'] is None
+        assert ret['jurisdiction'] is None
+        assert ret['date_created'] is None
+        assert ret['created_by'] is None
+        assert ret['cam_type'] is None
+        assert ret['effective_date'] is None
+        assert ret['speed_limit'] is None
+        assert ret['status'] is None
+
+    # invalid cam type
+    with pytest.raises(AssertionError):
+        conduent_fixture.get_location_by_id(9999999999, 30)
 
 
 def test_get_overheight_cameras(conduent_fixture):

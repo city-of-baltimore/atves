@@ -124,10 +124,12 @@ class Conduent:
     @retry(exceptions=requests.exceptions.ConnectionError,
            tries=10,
            delay=10)
-    def get_location_by_id(self, loc_id: int) -> CameraType:
+    def get_location_by_id(self, loc_id: int, cam_type: int) -> CameraType:
         """
-        Gets camera information by location id
+        Gets camera information by location id. The id is <ID> in
+        https://cw3.cite-web.com/citeweb3/locationByID.asp?ID=<ID>
         :param loc_id: Camera ID to lookup
+        :param cam_type: Type of camera data to pull (use the constants conduent.REDLIGHT or conduent.OVERHEIGHT
         :return: Dictionary of type `atves.conduent_types.CameraType` with camera data
         """
         ret: CameraType = {
@@ -141,27 +143,41 @@ class Conduent:
             'status': None,
             'cam_type': None}
 
+        if cam_type == REDLIGHT:
+            self._setup_report_request(REDLIGHT)
+        elif cam_type == OVERHEIGHT:
+            self._setup_report_request(OVERHEIGHT)
+        else:
+            raise AssertionError('Cam type {} is not valid'.format(cam_type))
+
         resp = self.session.get('https://cw3.cite-web.com/citeweb3/locationByID.asp?ID={}'.format(loc_id))
         if resp.status_code == 500:
-            self._setup_report_request(REDLIGHT)
-            resp = self.session.get('https://cw3.cite-web.com/citeweb3/locationByID.asp?ID={}'.format(loc_id))
+            logger.error('Got HTTP response code {}'.format(resp.status_code))
+            return ret
 
         soup = BeautifulSoup(resp.text, "html.parser")
-        pattern = re.compile(r'Site Code:\s*(\d*)\s*(.*?)\s\s*Jurisdiction: (\S)\s*Date Created: (.*?)\s\s*Created By: '
-                             r'(.*?)\s\s*Effective Date: (.*?)\s\s*Speed Limit: (\d*)\s\s*Status: (\w*)')
         if soup.select_one('p:-soup-contains("No location exists with the selected ID!")') is not None:
             logger.info("No location for ID {}", loc_id)
             return ret
 
-        text = soup.select_one('p:-soup-contains("Effective Date")').get_text().replace(u'\xa0', ' ')
-        cam_type = ''
-        if soup.select_one('p:-soup-contains("BaltimoreRL")'):
-            cam_type = 'RL'
-        elif soup.select_one('p:-soup-contains("BaltimoreOH")'):
-            cam_type = 'OH'
+        effective_date = soup.select_one('p:-soup-contains("Effective Date")')
+        if not effective_date:
+            logger.error("Unable to find Effective Date in HTTP response")
+            return ret
 
+        text = effective_date.get_text().replace(u'\xa0', ' ')
+
+        cam_type_str = ''
+        if soup.select_one('p:-soup-contains("BaltimoreRL")'):
+            cam_type_str = 'RL'
+        elif soup.select_one('p:-soup-contains("BaltimoreOH")'):
+            cam_type_str = 'OH'
+
+        pattern = re.compile(r'Site Code:\s*(\d*)\s*(.*?)\s\s*Jurisdiction: (\S)\s*Date Created: (.*?)\s\s*Created By: '
+                             r'(.*?)\s\s*Effective Date: (.*?)\s\s*Speed Limit: (\d*)\s\s*Status: (\w*)')
         results = pattern.search(text)
         if results is None:
+            logger.error('Unable to find expected camera data in HTTP response: {}'.format(text))
             return ret
 
         return {'site_code': results.group(1),
@@ -172,7 +188,7 @@ class Conduent:
                 'effective_date': results.group(6),
                 'speed_limit': results.group(7),
                 'status': results.group(8),
-                'cam_type': cam_type}
+                'cam_type': cam_type_str}
 
     @retry(exceptions=requests.exceptions.ConnectionError,
            tries=10,
@@ -501,12 +517,14 @@ class Conduent:
         }
 
         # add the input params to the payload data
-        payload.update(input_params)
+        if input_params:
+            payload.update(input_params)
 
         # scrape the parameters that need to come from univReports.asp
-        for name in scrape_params:
-            val = soup.find('input', {'name': name}).get('value')
-            payload[name] = val if val is not None else ''
+        if scrape_params:
+            for name in scrape_params:
+                val = soup.find('input', {'name': name}).get('value')
+                payload[name] = val if val is not None else ''
 
         # request the report, and get the filename where we need to download it
         resp = self.session.post('https://cw3.cite-web.com/citeweb3/univReports.asp',
