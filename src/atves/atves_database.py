@@ -90,7 +90,7 @@ from loguru import logger
 from balt_geocoder.geocoder import APIFatalError, Geocoder
 
 from atves.axsis import Axsis
-from atves.conduent import Conduent, ALLCAMS
+from atves.conduent import Conduent, ALLCAMS, REDLIGHT
 from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDUENT_PASSWORD
 from atves.creds import GAPI
 
@@ -147,7 +147,7 @@ class AtvesDatabase:
 
         while failures <= 50:
             loc_id += 1
-            ret = self.conduent_interface.get_location_by_id(loc_id)
+            ret = self.conduent_interface.get_location_by_id(loc_id, REDLIGHT)
             if ret is None:
                 failures += 1
                 continue
