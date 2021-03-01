@@ -15,18 +15,36 @@ def test_invalid_user_pass():
 
 def test_get_location_by_id(conduent_fixture):
     """Tests get_location_by_id"""
-    ret = conduent_fixture.get_location_by_id(1)
+    # Camera 1 is a red light cam, and camera 2003 is an overheight cam
+    for id in [1, 2003]:
+        ret = conduent_fixture.get_location_by_id(id)
+        assert ret is not None
+        assert len(ret) == 9
+        assert str(ret['site_code']).isnumeric()
+        assert str(ret['location']) is not None
+        assert str(ret['jurisdiction']).isnumeric()
+        assert str(ret['date_created']) is not None
+        assert str(ret['created_by']) is not None
+        assert str(ret['cam_type']) is not None
+        assert ret['effective_date'] is not None
+        assert str(ret['speed_limit']).isnumeric()
+        assert ret['status'] == 'Active'
+
+
+def test_get_lcoation_by_id_invalid(conduent_fixture):
+    """Tests get_location_by_id with a bad id"""
+    ret = conduent_fixture.get_location_by_id(9999999999)
     assert ret is not None
     assert len(ret) == 9
-    assert str(ret['site_code']).isnumeric()
-    assert str(ret['location']) is not None
-    assert str(ret['jurisdiction']).isnumeric()
-    assert str(ret['date_created']) is not None
-    assert str(ret['created_by']) is not None
-    assert str(ret['cam_type']) is not None
-    assert ret['effective_date'] is not None
-    assert str(ret['speed_limit']).isnumeric()
-    assert ret['status'] == 'Active'
+    assert ret['site_code'] is None
+    assert ret['location'] is None
+    assert ret['jurisdiction'] is None
+    assert ret['date_created'] is None
+    assert ret['created_by'] is None
+    assert ret['cam_type'] is None
+    assert ret['effective_date'] is None
+    assert ret['speed_limit'] is None
+    assert ret['status'] is None
 
 
 def test_get_overheight_cameras(conduent_fixture):
@@ -69,6 +87,10 @@ def test_get_deployment_data(conduent_fixture):
     verify_dataframe(ret_overheight, start_date, end_date)
 
     assert len(ret_all) == len(ret_redlight) + len(ret_overheight)
+
+    # invalid cam type
+    with pytest.raises(AssertionError):
+        conduent_fixture.get_deployment_data(start_date.date(), end_date.date(), 30)
 
 
 def test_get_amber_time_rejects_report(conduent_fixture):
@@ -140,6 +162,10 @@ def test_get_approval_by_review_date_details(conduent_fixture):
                                                                'NOTALOCATION')
     assert ret is None
 
+    # invalid cam type
+    with pytest.raises(AssertionError):
+        conduent_fixture.get_approval_by_review_date_details(start_date, end_date, 30)
+
 
 def test_get_approval_summary_by_queue(conduent_fixture):
     """Tests get_approval_summary_by_queue"""
@@ -173,6 +199,10 @@ def test_get_approval_summary_by_queue(conduent_fixture):
     ret = conduent_fixture.get_approval_summary_by_queue(start_date, end_date, atves.conduent.OVERHEIGHT,
                                                          'NOTALOCATION')
     assert ret is None
+
+    # invalid cam type
+    with pytest.raises(AssertionError):
+        conduent_fixture.get_approval_summary_by_queue(start_date, end_date, 30)
 
 
 def test_get_client_summary_by_location(conduent_fixture):
@@ -208,6 +238,10 @@ def test_get_client_summary_by_location(conduent_fixture):
     ret = conduent_fixture.get_client_summary_by_location(start_date, end_date, atves.conduent.OVERHEIGHT,
                                                           'NOTALOCATION')
     assert ret is None
+
+    # invalid cam type
+    with pytest.raises(AssertionError):
+        conduent_fixture.get_client_summary_by_location(start_date, end_date, 30)
 
 
 def test_get_expired_by_location(conduent_fixture):
@@ -285,7 +319,7 @@ def test_get_violations_issued_by_location(conduent_fixture):
     assert len(ret) > 5
 
 
-def get_daily_self_test(conduent_fixture):
+def test_get_daily_self_test(conduent_fixture):
     """Tests get_daily_self_test"""
     start_date = date(2020, 11, 1)
     end_date = date(2020, 11, 30)
@@ -293,13 +327,17 @@ def get_daily_self_test(conduent_fixture):
     assert len(ret) > 5
 
 
-def get_pending_client_approval(conduent_fixture):
+def test_get_pending_client_approval(conduent_fixture):
     """Tests get_pending_client_approval"""
     ret = conduent_fixture.get_pending_client_approval(atves.conduent.OVERHEIGHT)
     assert len(ret) > 5
 
     ret = conduent_fixture.get_pending_client_approval(atves.conduent.REDLIGHT)
     assert len(ret) > 5
+
+    # invalid cam type
+    with pytest.raises(AssertionError):
+        conduent_fixture.get_pending_client_approval(30)
 
     with pytest.raises(AssertionError):
         conduent_fixture.get_pending_client_approval("invalid")
