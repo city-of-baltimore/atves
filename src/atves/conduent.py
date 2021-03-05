@@ -292,7 +292,7 @@ class Conduent:
         :param location: Optional location search. Uses the codes from the website
         :return: pandas.core.frame.DataFrame
         """
-        if cam_type not in [REDLIGHT, OVERHEIGHT]:
+        if cam_type not in [REDLIGHT, OVERHEIGHT, ALLCAMS]:
             raise AssertionError("Cam type {} is unexpected".format(cam_type))
 
         if cam_type == REDLIGHT:

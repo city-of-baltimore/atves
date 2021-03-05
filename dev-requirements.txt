@@ -7,4 +7,4 @@ bandit~=1.7.0
 mypy~=0.800
 pytest~=6.2.1
 pytest-cov~=2.11.1
-tox~=3.22.0
+tox~=3.23.0
