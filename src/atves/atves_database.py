@@ -1,108 +1,44 @@
-"""
-Code that pulls data through the Conduent and Axsis libraries, and inserts it into the database
-
-Table holding the traffic counts from the speed cameras
-CREATE TABLE [dbo].[atves_traffic_counts](
-    [locationcode] [nchar](10) NULL,
-    [date] [date] NULL,
-    [count] [int] NULL
-)
-
-Table holding the ticket counts for the red light and overheight cameras
-CREATE TABLE [dbo].[atves_ticket_cameras](
-    [id] [int] NOT NULL,
-    [start_time] [datetime2] NOT NULL,
-    [end_time] [datetime2] NOT NULL,
-    [location] [varchar](max) NOT NULL,
-    [officer] [varchar](max) NULL,
-    [equip_type] [varchar](max) NULL,
-    [issued] [int] NOT NULL,
-    [rejected] [int] NOT NULL
-) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
-
-The camera location database looks like this
-CREATE TABLE [dbo].[atves_cam_locations](
-    [locationcode] [nchar](100),
-    [locationdescription] [nchar](100) NOT NULL,
-    [lat] [decimal](6, 4) NOT NULL,
-    [long] [decimal](6, 4) NOT NULL,
-    [cam_type] [nchar](2) NOT NULL,
-    [effective_date] [date],
-    [speed_limit] [int],
-    [status] [bit]
-)
-
-get_amber_time_rejects_report (rlo)
-CREATE TABLE [dbo].[atves_amber_time_rejects](
-    [location_code] [int] NOT NULL,
-    [deployment_no] [int] NOT NULL,
-    [violation_date] [datetime2] NOT NULL,
-    [amber_time] [decimal](5, 3) NOT NULL,
-    [amber_reject_code] [nchar](100),
-    [event_number] [int] NOT NULL PRIMARY KEY
-)
-
-get_approval_by_review_date_details (rlo)
-CREATE TABLE [dbo].[atves_approval_by_review_date_details](
-    [disapproved] [int] NOT NULL,
-    [approved] [int] NOT NULL,
-    [officer] [nvarchar](100),
-    [citation_no] [nvarchar](20) NOT NULL PRIMARY KEY,
-    [violation_date] [datetime2],
-    [review_status] varchar(20),
-    [review_datetime] [datetime2]
-)
-
-get_client_summary_by_location
-CREATE TABLE [dbo].[atves_by_location](
-    [date] [date] NOT NULL,
-    [location_code] [int] NOT NULL,
-    [section] [nvarchar](20),
-    [details] [nvarchar](100),
-    [percentage_desc] [nvarchar](50),
-    [issued] [int] NOT NULL,
-    [in_process] [int] NOT NULL,
-    [non_violations] [int] NOT NULL,
-    [controllable_rejects] [int] NOT NULL,
-    [uncontrollable_rejects] [int] NOT NULL,
-    [pending_initial_approval] [int] NOT NULL,
-    [pending_reject_approval] [int] NOT NULL,
-    [vcDescription] [nvarchar](100),
-    [detail_count] [int],
-    [order_by] [int]
-)
-
-# not importing yet
-get_approval_summary_by_queue
-get_expired_by_location
-get_in_city_vs_out_of_city
-get_daily_self_test
-get_pending_client_approval
-"""
-
+"""Pulls data through the Conduent and Axsis libraries, and inserts it into the database"""
 import math
 import re
-from datetime import date, datetime
-from typing import List
+from datetime import date, datetime, timedelta
+from typing import Optional
 
-import pyodbc  # type: ignore
-from loguru import logger
 from balt_geocoder.geocoder import APIFatalError, Geocoder
+from loguru import logger
+from sqlalchemy import create_engine, inspect as sqlalchemyinspect  # type: ignore
+from sqlalchemy.exc import IntegrityError  # type: ignore
+from sqlalchemy.ext.declarative import DeclarativeMeta  # type: ignore
+from sqlalchemy.orm import Session  # type: ignore
+from sqlalchemy.sql import text  # type: ignore
 
+from atves.atves_schema import AtvesAmberTimeRejects, AtvesApprovalByReviewDateDetails, AtvesByLocation, \
+    AtvesCamLocations, AtvesTicketCameras, AtvesTrafficCounts, Base
 from atves.axsis import Axsis
-from atves.conduent import Conduent, ALLCAMS, REDLIGHT
-from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDUENT_PASSWORD
-from atves.creds import GAPI
+from atves.conduent import Conduent, ALLCAMS, REDLIGHT, OVERHEIGHT
+from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDUENT_PASSWORD, GAPI
 
 
 class AtvesDatabase:
     """ Helper class for the Coduent and Axsis classes that inserts data into the relevant databases"""
 
-    def __init__(self):
-        conn = pyodbc.connect('Driver={SQL Server};Server=balt-sql311-prd;Database=DOT_DATA;Trusted_Connection=yes;')
-        self.cursor = conn.cursor()
-        self.axsis_interface = Axsis(username=AXSIS_USERNAME, password=AXSIS_PASSWORD)
-        self.conduent_interface = Conduent(CONDUENT_USERNAME, CONDUENT_PASSWORD)
+    def __init__(self, conn_str: str, atves_user: str = AXSIS_USERNAME,  # pylint:disable=too-many-arguments
+                 atves_pass: str = AXSIS_PASSWORD, conduent_user: str = CONDUENT_USERNAME,
+                 conduent_pass: str = CONDUENT_PASSWORD, geocodio_api_key: str = GAPI[0]):
+        """
+        :param conn_str: sqlalchemy connection string (IE sqlite:///crash.db or
+        Driver={SQL Server};Server=balt-sql311-prd;Database=DOT_DATA;Trusted_Connection=yes;)
+        """
+
+        logger.info('Creating db with connection string: {}', conn_str)
+        self.engine = create_engine(conn_str, echo=True, future=True)
+
+        with self.engine.begin() as connection:
+            Base.metadata.create_all(connection)
+
+        self.axsis_interface = Axsis(username=atves_user, password=atves_pass)
+        self.conduent_interface = Conduent(conduent_user, conduent_pass)
+        self.geocoder = Geocoder(geocodio_api_key)
 
     def build_location_db(self) -> None:
         """
@@ -113,136 +49,123 @@ class AtvesDatabase:
         self._build_db_conduent_overheight()
         self._build_db_speed_cameras()
 
-        # Look for missing elements
-        self.cursor.execute("SELECT DISTINCT [location_code] FROM [DOT_DATA].[dbo].[atves_amber_time_rejects]")
-        location_codes = [str(x[0]).strip() for x in self.cursor.fetchall()]
+        with Session(bind=self.engine, future=True) as session:
+            # Look for missing location ids
+            location_codes = session.query(AtvesAmberTimeRejects.location_code).all()
+            location_codes += session.query(AtvesByLocation.location_code).all()
+            location_codes += session.query(AtvesTrafficCounts.locationcode).all()
 
-        self.cursor.execute("SELECT DISTINCT [location_code] FROM [DOT_DATA].[dbo].[atves_by_location]")
-        location_codes += [str(x[0]).strip() for x in self.cursor.fetchall()]
+            existing_location_codes = session.query(AtvesCamLocations.locationcode).all()
 
-        self.cursor.execute("SELECT DISTINCT locationcode FROM [DOT_DATA].[dbo].[atves_traffic_counts]")
-        location_codes += [str(x[0]).strip() for x in self.cursor.fetchall()]
+            diff = list(set(location_codes) - set(existing_location_codes))
+            if diff:
+                raise AssertionError("Missing location codes: {}".format(diff))
 
-        self.cursor.execute("SELECT DISTINCT [locationcode] FROM [DOT_DATA].[dbo].[atves_cam_locations]")
-        existing_location_codes = [str(x[0]).strip() for x in self.cursor.fetchall()]
-        diff = list(set(location_codes) - set(existing_location_codes))
-        if diff:
-            logger.warning("Missing location codes: {}", diff)
+            # look for missing locations
+            locations = session.query(AtvesTicketCameras.location).all()
+            existing_locations = session.query(AtvesCamLocations.locationdescription).all()
+            diff = list(locations - existing_locations)
 
-        self.cursor.execute("SELECT DISTINCT [location] FROM [DOT_DATA].[dbo].[atves_ticket_cameras]")
-        locations = [str(x[0]).strip() for x in self.cursor.fetchall()]
-
-        self.cursor.execute("SELECT DISTINCT [locationdescription] FROM [DOT_DATA].[dbo].[atves_cam_locations]")
-        existing_locations = [str(x[0]).strip() for x in self.cursor.fetchall()]
-        diff = list(set(locations) - set(existing_locations))
-        if diff:
-            logger.warning("Missing locations: {}", diff)
+            if diff:
+                raise AssertionError("Missing locations: {}".format(diff))
 
     def _build_db_conduent_red_light(self) -> None:
         """Builds the camera location database for red light cameras"""
         failures = 0
         loc_id = 0
-        data_list = []
-        geocoder = Geocoder(GAPI)
 
+        # we use the 'failures' because we don't know the range of valid location ids
         while failures <= 50:
             loc_id += 1
             ret = self.conduent_interface.get_location_by_id(loc_id, REDLIGHT)
-            if ret is None:
+            if ret['site_code'] is None:
                 failures += 1
                 continue
 
             try:
-                geo = geocoder.geocode("{}, Baltimore, MD".format(ret['location']))
-                lat = geo.get('latitude') if geo else None
-                lng = geo.get('longitude') if geo else None
-                data_list.append((str(ret['site_code']), str(ret['location']), lat, lng, str(ret['cam_type']),
-                                  ret['effective_date'], int(ret['speed_limit']), bool(ret['status'] == 'Active')))
+                geo = self.geocoder.geocode("{}, Baltimore, MD".format(ret['location']))
+                self._insert_or_update(AtvesCamLocations(
+                    locationcode=str(ret['site_code']),
+                    locationdescription=str(ret['location']),
+                    lat=geo.get('latitude') if geo else None,
+                    long=geo.get('longitude') if geo else None,
+                    cam_type=str(ret['cam_type']),
+                    effective_date=datetime.strptime(ret['effective_date'], '%b %d, %Y'),
+                    speed_limit=int(ret['speed_limit']),
+                    status=bool(ret['status'] == 'Active')))
             except (RuntimeError, APIFatalError) as err:
                 logger.warning("Geocoder error: {}", err)
-
-        # Insert the known good ones
-        if data_list:
-            self._insert_location_table_elements(data_list)
 
     def _build_db_conduent_overheight(self) -> None:
         """Builds the camera location database for over height cameras"""
         oh_list = self.conduent_interface.get_overheight_cameras()
-        data_list = []
-        geocoder = Geocoder(GAPI)
 
         for location_code, location in oh_list:
-            geo = geocoder.geocode("{}, Baltimore, MD".format(location))
-            lat = geo.get('latitude') if geo else None
-            lng = geo.get('longitude') if geo else None
-            data_list.append((location_code, location, lat, lng, 'OH', None, None, None))
-
-        if data_list:
-            self._insert_location_table_elements(data_list)
+            geo = self.geocoder.geocode("{}, Baltimore, MD".format(location))
+            self._insert_or_update(AtvesCamLocations(locationcode=location_code,
+                                                     locationdescription=location,
+                                                     lat=geo.get('latitude') if geo else None,
+                                                     long=geo.get('longitude') if geo else None,
+                                                     cam_type='OH',
+                                                     effective_date=None,
+                                                     speed_limit=None,
+                                                     status=None))
 
     def _build_db_speed_cameras(self) -> None:
         """Builds the camera location database for speed cameras"""
         # Get the list of location codes in the traffic count database (AXSIS)
-        self.cursor.execute("SELECT DISTINCT [locationcode] "
-                            "FROM [DOT_DATA].[dbo].[atves_traffic_counts]"
-                            "WHERE locationcode LIKE 'BAL%'")
-        location_codes_needed = [str(x[0]).strip() for x in self.cursor.fetchall()]
+        with Session(bind=self.engine, future=True) as session:
+            # get all cameras used in the last 30 days
 
-        self.cursor.execute("SELECT DISTINCT [locationcode] "
-                            "FROM [DOT_DATA].[dbo].[atves_cam_locations]"
-                            "WHERE locationcode LIKE 'BAL%'")
-        location_codes_existing = [str(x[0]).strip() for x in self.cursor.fetchall()]
+            location_codes_needed = self.axsis_interface.get_traffic_counts(start_date=date.today()-timedelta(days=30),
+                                                                            end_date=date.today())\
+                .get('Location code').to_list()
 
-        diff = list(set(location_codes_needed) - set(location_codes_existing))
-        data_list = []
-        geocoder = Geocoder(GAPI)
+            location_codes_needed += session.query(AtvesTrafficCounts.locationcode). \
+                filter(AtvesTrafficCounts.locationcode.like('BAL%')).all()
 
-        for location_code in diff:
-            if not location_code:
-                continue
+            location_codes_existing = session.query(AtvesCamLocations.locationcode). \
+                filter(AtvesCamLocations.locationcode.like('BAL%')).all()
 
-            # First, lets get a date when this camera existed
-            self.cursor.execute("SELECT * FROM [DOT_DATA].[dbo].[atves_traffic_counts] WHERE locationcode = ?",
-                                location_code)
-            traffic_counts = self.cursor.fetchall()
+            diff = set(location_codes_needed) - set(location_codes_existing)
 
-            cam_date = datetime.strptime(traffic_counts[0][1], "%Y-%m-%d")
-            axsis_data = self.axsis_interface.get_traffic_counts(cam_date, cam_date)
-            location = [x for x in axsis_data.values.tolist() if x[0] == location_code][0][1]
+            for location_code in diff:
+                if not location_code:
+                    continue
 
-            if not location:
-                continue
+                # First, lets get a date when this camera existed
+                traffic_counts = session.query(AtvesTrafficCounts.date). \
+                    filter(AtvesTrafficCounts.locationcode == location_code).all()
 
-            geo = geocoder.geocode("{}, Baltimore, MD".format(location))
-            lat = geo.get('latitude') if geo else None
-            lng = geo.get('longitude') if geo else None
-            data_list.append((location_code, location, lat, lng, 'SC', cam_date, None, None))
+                if traffic_counts:
+                    cam_date: Optional[datetime] = datetime.strptime(traffic_counts[0][1], "%Y-%m-%d")
+                    axsis_data = self.axsis_interface.get_traffic_counts(cam_date, cam_date)
+                    location = [x for x in axsis_data.values.tolist() if x[0] == location_code][0][1]
+                else:
+                    cam_date = None
+                    location = self.axsis_interface.get_location_info(location_code)
 
-        if data_list:
-            self._insert_location_table_elements(data_list)
+                if not location:
+                    continue
 
-    def _insert_location_table_elements(self, data_list: List) -> None:
-        self.cursor.executemany("""
-            MERGE [atves_cam_locations] USING (
-            VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?)
-            ) AS vals (locationcode, locationdescription, lat, long, cam_type, effective_date, speed_limit,
-                status)
-            ON (atves_cam_locations.locationcode = vals.locationcode)
-            WHEN NOT MATCHED THEN
-                INSERT (locationcode, locationdescription, lat, long, cam_type, effective_date, speed_limit,
-                    status)
-                VALUES (locationcode, locationdescription, lat, long, cam_type, effective_date, speed_limit,
-                    status);
-            """, data_list)
-        self.cursor.commit()
+                geo = self.geocoder.geocode("{}, Baltimore, MD".format(location))
+                lat = geo.get('latitude') if geo else None
+                lng = geo.get('longitude') if geo else None
+                self._insert_or_update(AtvesCamLocations(locationcode=location_code,
+                                                         locationdescription=location,
+                                                         lat=lat,
+                                                         long=lng,
+                                                         cam_type='SC',
+                                                         effective_date=cam_date,
+                                                         speed_limit=None,
+                                                         status=None))
 
     def process_conduent_reject_numbers(self, start_date: date, end_date: date, cam_type=ALLCAMS) -> None:
         """
         Inserts data into the database from conduent rejection numbers
-        :param start_date: (datetime) Start date of the report to pull
-        :param end_date: (datetime) End date of the report to pull
-        :param cam_type: (int) Type of camera data to pull (use the constants conduent.REDLIGHT or conduent.OVERHEIGHT
+        :param start_date: Start date of the report to pull
+        :param end_date: End date of the report to pull
+        :param cam_type: Type of camera data to pull (use the constants conduent.REDLIGHT or conduent.OVERHEIGHT
             or conduent.ALLCAMS (default: conduent.ALLCAMS)
         :return: None
         """
@@ -253,24 +176,15 @@ class AtvesDatabase:
         if not data:
             return
 
-        data_list = []
         for row in data:
-            data_list.append((int(row['id']), row['start_time'], row['end_time'], str(row['location']),
-                              str(row['officer']), str(row['equip_type']), int(row['issued']), int(row['rejected'])))
-
-        self.cursor.executemany("""
-        MERGE [atves_ticket_cameras] USING (
-        VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?)
-        ) AS vals (id, start_time, end_time, location, officer, equip_type, issued, rejected)
-        ON (atves_ticket_cameras.start_time = vals.start_time AND
-            atves_ticket_cameras.location = vals.location)
-        WHEN NOT MATCHED THEN
-            INSERT (id, start_time, end_time, location, officer, equip_type, issued, rejected)
-            VALUES (id, start_time, end_time, location, officer, equip_type, issued, rejected);
-        """, data_list)
-
-        self.cursor.commit()
+            self._insert_or_update(AtvesTicketCameras(id=int(row['id']),
+                                                      start_time=row['start_time'],
+                                                      end_time=row['end_time'],
+                                                      location=str(row['location']),
+                                                      officer=str(row['officer']),
+                                                      equip_type=str(row['equip_type']),
+                                                      issued=int(row['issued']),
+                                                      rejected=int(row['rejected'])))
 
     def process_conduent_data_amber_time(self, start_date: date, end_date: date) -> None:
         """
@@ -279,7 +193,7 @@ class AtvesDatabase:
         :param end_date: End date of the report to pull
         :return:
         """
-        logger.info('Processing conduent amber time report from {} to {}}', start_date.strftime("%m/%d/%y"),
+        logger.info('Processing conduent amber time report from {} to {}', start_date.strftime("%m/%d/%y"),
                     end_date.strftime("%m/%d/%y"))
 
         data = self.conduent_interface.get_amber_time_rejects_report(start_date, end_date)
@@ -287,25 +201,16 @@ class AtvesDatabase:
         if data.empty:
             return
 
-        data_list = []
         for _, row in data.iterrows():
-            data_list.append((int(row['iLocationCode']), int(row['Deployment Number']), row['VioDate'],
-                              float(row['Amber Time']), str(row['Amber Reject Code']), int(row['Event Number'])))
+            self._insert_or_update(AtvesAmberTimeRejects(
+                location_code=int(row['iLocationCode']),
+                deployment_no=int(row['Deployment Number']),
+                violation_date=datetime.strptime(row['VioDate'], '%m/%d/%Y %I:%M:%S %p'),
+                amber_time=float(row['Amber Time']),
+                amber_reject_code=str(row['Amber Reject Code']),
+                event_number=int(row['Event Number'])))
 
-        self.cursor.executemany("""
-            MERGE [atves_amber_time_rejects] USING(
-            VALUES
-                (?, ?, ?, ?, ?, ?)
-            ) AS vals (location_code, deployment_no, violation_date, amber_time, amber_reject_code, event_number)
-            ON atves_amber_time_rejects.event_number = vals.event_number
-            WHEN NOT MATCHED THEN
-                INSERT (location_code, deployment_no, violation_date, amber_time, amber_reject_code, event_number)
-                VALUES (location_code, deployment_no, violation_date, amber_time, amber_reject_code, event_number);
-        """, data_list)
-
-        self.cursor.commit()
-
-    def process_conduent_data_approval_by_review_date(self, start_date: date, end_date: date, cam_type: int):
+    def process_conduent_data_approval_by_review_date(self, start_date: date, end_date: date, cam_type: int) -> None:
         """
 
         :param start_date: Start date of the report to pull
@@ -320,25 +225,17 @@ class AtvesDatabase:
         if data.empty:
             return
 
-        data_list = []
         for _, row in data.iterrows():
-            review_date = "{} {}".format(row['Review Date'], row['st'])
-            data_list.append((int(row['Disapproved']), int(row['Approved']), str(row['Officer']), str(row['CitNum']),
-                              row['Vio Date'], str(row['Review Status']), review_date))
+            self._insert_or_update(AtvesApprovalByReviewDateDetails(
+                disapproved=int(row['Disapproved']),
+                approved=int(row['Approved']),
+                officer=str(row['Officer']),
+                citation_no=str(row['CitNum']),
+                violation_date=datetime.strptime(row['Vio Date'], '%b %d %Y %I:%M%p'),
+                review_status=str(row['Review Status']),
+                review_datetime=datetime.strptime("{} {}".format(row['Review Date'], row['st']), '%m/%d/%Y %H:%M:%S')))
 
-        self.cursor.executemany("""
-            MERGE [atves_approval_by_review_date_details] USING(
-            VALUES
-                (?, ?, ?, ?, ?, ?, ?)
-            ) AS vals (disapproved, approved, officer, citation_no, violation_date, review_status, review_datetime)
-            ON atves_approval_by_review_date_details.citation_no = vals.citation_no
-            WHEN NOT MATCHED THEN
-                INSERT (disapproved, approved, officer, citation_no, violation_date, review_status, review_datetime)
-                VALUES (disapproved, approved, officer, citation_no, violation_date, review_status, review_datetime);
-        """, data_list)
-        self.cursor.commit()
-
-    def process_conduent_data_by_location(self, start_date: date, end_date: date, cam_type: int = ALLCAMS):
+    def process_conduent_data_by_location(self, start_date: date, end_date: date, cam_type: int = ALLCAMS) -> None:
         """
 
         :param cam_type: Either conduent.REDLIGHT or conduent.OVERHEIGHT
@@ -346,6 +243,10 @@ class AtvesDatabase:
         :param end_date: End date of the report to pull
         :return:
         """
+        if cam_type == ALLCAMS:
+            self.process_conduent_data_by_location(start_date, end_date, REDLIGHT)
+            self.process_conduent_data_by_location(start_date, end_date, OVERHEIGHT)
+            return
 
         def _get_int(value):
             """Gets int on the front of the string"""
@@ -367,39 +268,27 @@ class AtvesDatabase:
         if data.empty:
             return
 
-        data_list = []
         for _, row in data.iterrows():
             location_id = _get_int(row['Locations'])
             if location_id == 0:
                 continue
-            data_list.append((row['Date'], location_id, str(row['Section']), str(row['Details']),
-                              str(row['PercentageDescription']), int(row['Issued']), int(row['InProcess']),
-                              int(row['NonViolations']), int(row['ControllableRejects']),
-                              int(row['UncontrollableRejects']), int(row['PendingInitialapproval']),
-                              int(row['PendingRejectapproval']), str(row['vcDescription']), int(row['DetailCount']),
-                              _get_int(row['iOrderBy'])))
+            self._insert_or_update(AtvesByLocation(date=datetime.strptime(row['Date'], '%m/%d/%y').date(),
+                                                   location_code=location_id,
+                                                   section=str(row['Section']),
+                                                   details=str(row['Details']),
+                                                   percentage_desc=str(row['PercentageDescription']),
+                                                   issued=int(row['Issued']),
+                                                   in_process=int(row['InProcess']),
+                                                   non_violations=int(row['NonViolations']),
+                                                   controllable_rejects=int(row['ControllableRejects']),
+                                                   uncontrollable_rejects=int(row['UncontrollableRejects']),
+                                                   pending_initial_approval=int(row['PendingInitialapproval']),
+                                                   pending_reject_approval=int(row['PendingRejectapproval']),
+                                                   vcDescription=str(row['vcDescription']),
+                                                   detail_count=int(row['DetailCount']),
+                                                   order_by=_get_int(row['iOrderBy'])))
 
-        self.cursor.executemany("""
-            MERGE [atves_by_location] USING(
-            VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ) AS vals (date, location_code, section, details, percentage_desc, issued, in_process, non_violations,
-            controllable_rejects, uncontrollable_rejects, pending_initial_approval, pending_reject_approval,
-            vcDescription, detail_count, order_by)
-            ON (atves_by_location.date = vals.date AND
-                atves_by_location.location_code = vals.location_code AND
-                atves_by_location.vcDescription = vals.vcDescription)
-            WHEN NOT MATCHED THEN
-                INSERT (date, location_code, section, details, percentage_desc, issued, in_process, non_violations,
-                    controllable_rejects, uncontrollable_rejects, pending_initial_approval, pending_reject_approval,
-                    vcDescription, detail_count, order_by)
-                VALUES (date, location_code, section, details, percentage_desc, issued, in_process, non_violations,
-                    controllable_rejects, uncontrollable_rejects, pending_initial_approval, pending_reject_approval,
-                    vcDescription, detail_count, order_by);
-        """, data_list)
-        self.cursor.commit()
-
-    def process_traffic_count_data(self, start_date: date, end_date: date):
+    def process_traffic_count_data(self, start_date: date, end_date: date) -> None:
         """
         Processes the traffic count camera data from Axsis and Conduent
         :param start_date: Start date of the report to pull
@@ -414,29 +303,72 @@ class AtvesDatabase:
         axsis_data = axsis_data.to_dict('index')
         columns = axsis_data[0].keys() - ['Location code', 'Description', 'First Traf Evt', 'Last Traf Evt']
 
-        data = [(row['Location code'], event_date, row[event_date])
-                for row in axsis_data.values()
-                for event_date in columns
-                if not math.isnan(row[event_date])]
+        for row in axsis_data.values():
+            for event_date in columns:
+                if not math.isnan(row[event_date]):
+                    self._insert_or_update(AtvesTrafficCounts(locationcode=str(row['Location code']).strip(),
+                                                              date=datetime.strptime(event_date, '%m/%d/%Y').date(),
+                                                              count=int(row[event_date])))
 
         # Get data from red light cameras
         conduent_data = self.conduent_interface.get_traffic_counts_by_location(start_date, end_date)
-        data += [(str(row['iLocationCode']).strip(), row['Ddate'], int(row['VehPass']))
-                 for index, row in conduent_data.iterrows()]
+        for _, row in conduent_data.iterrows():
+            self._insert_or_update(AtvesTrafficCounts(locationcode=str(row['iLocationCode']).strip(),
+                                                      date=datetime.strptime(row['Ddate'], '%m/%d/%Y').date(),
+                                                      count=int(row['VehPass'])))
 
-        if data:
-            self.cursor.executemany("""
-                        MERGE atves_traffic_counts USING (
-                        VALUES
-                            (?, ?, ?)
-                        ) AS vals (locationcode, [date], count)
-                        ON (atves_traffic_counts.locationcode = vals.locationcode AND
-                            atves_traffic_counts.date = vals.date)
-                        WHEN MATCHED THEN
-                            UPDATE SET
-                            count = vals.count
-                        WHEN NOT MATCHED THEN
-                            INSERT (locationcode, [date], count)
-                            VALUES (vals.locationcode, vals.date, vals.count);
-                        """, data)
-            self.cursor.commit()
+    def _insert_or_update(self, insert_obj: DeclarativeMeta, identity_insert=False) -> None:
+        """
+        A safe way for the sqlalchemy to insert if the record doesn't exist, or update if it does. Copied from
+        trafficstat.crash_data_ingester
+        :param insert_obj:
+        :param identity_insert:
+        :return:
+        """
+        session = Session(bind=self.engine, future=True)
+        if identity_insert:
+            session.execute(text('SET IDENTITY_INSERT {} ON'.format(insert_obj.__tablename__)))
+
+        session.add(insert_obj)
+        try:
+            session.commit()
+            logger.debug('Successfully inserted object: {}', insert_obj)
+        except IntegrityError as insert_err:
+            session.rollback()
+
+            if '(544)' in insert_err.args[0]:
+                # This is a workaround for an issue with sqlalchemy not properly setting IDENTITY_INSERT on for SQL
+                # Server before we insert values in the primary key. The error is:
+                # (pyodbc.IntegrityError) ('23000', "[23000] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]
+                # Cannot insert explicit value for identity column in table <table name> when IDENTITY_INSERT is set to
+                # OFF. (544) (SQLExecDirectW)")
+                self._insert_or_update(insert_obj, True)
+
+            elif '(2627)' in insert_err.args[0] or 'UNIQUE constraint failed' in insert_err.args[0]:
+                # Error 2627 is the Sql Server error for inserting when the primary key already exists. 'UNIQUE
+                # constraint failed' is the same for Sqlite
+                cls_type = type(insert_obj)
+
+                qry = session.query(cls_type)
+
+                primary_keys = [i.key for i in sqlalchemyinspect(cls_type).primary_key]
+                for primary_key in primary_keys:
+                    qry = qry.filter(cls_type.__dict__[primary_key] == insert_obj.__dict__[primary_key])
+
+                update_vals = {k: v for k, v in insert_obj.__dict__.items()
+                               if not k.startswith('_') and k not in primary_keys}
+                if update_vals:
+                    qry.update(update_vals)
+                    try:
+                        session.commit()
+                        logger.debug('Successfully inserted object: {}', insert_obj)
+                    except IntegrityError as update_err:
+                        logger.error('Unable to insert object: {}\nError: {}', insert_obj, update_err)
+
+            else:
+                raise AssertionError('Expected error 2627 or "UNIQUE constraint failed". Got {}'.format(insert_err)) \
+                    from insert_err
+        finally:
+            if identity_insert:
+                session.execute(text('SET IDENTITY_INSERT {} OFF'.format(insert_obj.__tablename__)))
+            session.close()
