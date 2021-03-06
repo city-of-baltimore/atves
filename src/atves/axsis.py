@@ -1,8 +1,7 @@
-"""
-Python wrapper around the Axsis Mobility Platform
-"""
+"""Python wrapper around the Axsis Mobility Platform"""
 import ast
 from datetime import date, timedelta
+from typing import cast, Dict, Optional
 
 import pandas as pd  # type: ignore
 import requests
@@ -10,6 +9,8 @@ import xlrd  # type: ignore
 from bs4 import BeautifulSoup  # type: ignore
 from loguru import logger
 from retry import retry
+
+from atves.axsis_types import ReportsDetailType
 
 ACCEPT_HEADER = ("text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/"
                  "signed-exchange;v=b3;q=0.9")
@@ -35,7 +36,7 @@ class Axsis:
     @retry(exceptions=(requests.exceptions.ConnectionError, xlrd.biffh.XLRDError),
            tries=10,
            delay=10)
-    def get_traffic_counts(self, start_date: date, end_date: date):
+    def get_traffic_counts(self, start_date: date, end_date: date) -> pd.DataFrame:
         """
         Get the 'Site activity by traffic events' report
         :param start_date: First date to search, inclusive
@@ -82,7 +83,7 @@ class Axsis:
     @retry(exceptions=requests.exceptions.ConnectionError,
            tries=10,
            delay=10)
-    def _login(self):
+    def _login(self) -> None:
         """
         Logs into the Axsis system, which is required to do anything with the API
         :return: None
@@ -118,7 +119,6 @@ class Axsis:
                                      data=data)
 
         soup = BeautifulSoup(response.content, "html.parser")
-
         if soup.find("input", {"name": "session_state"}) is None:
             raise Exception("Invalid username or password")
 
@@ -148,7 +148,7 @@ class Axsis:
     @retry(exceptions=requests.exceptions.ConnectionError,
            tries=10,
            delay=10)
-    def _get_client_id(self):
+    def _get_client_id(self) -> None:
         """
         Gets the client id and client code associated with self.username and assigns them to those attributes
         :return: None
@@ -169,12 +169,12 @@ class Axsis:
     @retry(exceptions=requests.exceptions.ConnectionError,
            tries=10,
            delay=10)
-    def _get_reports(self, name):
+    def _get_reports(self, name: str) -> Optional[int]:
         """
         Take the response to GetReports and get the required report number
 
-        :param name: (str) The name of the report
-        :return: (int) The report_id
+        :param name: The name of the report
+        :return: The report_id. If the `name` was not valid, then the return will be None
         """
         headers = {
             'Accept': 'application/json, text/javascript, */*; q=0.01',
@@ -197,16 +197,17 @@ class Axsis:
             if report['ReportName'] == name:
                 return int(report['ReportId'])
 
-        return 0
+        return None
 
     @retry(exceptions=requests.exceptions.ConnectionError,
            tries=10,
            delay=10)
-    def get_reports_detail(self, report_name: str):
+    def get_reports_detail(self, report_name: str) -> Optional[ReportsDetailType]:
         """
-
-        :param report_name: ReportDescription to get the parameter details for
-        :return: List of dictionaries of the parameter definitions
+        Gets the ReportsDetailType structure of the report details from AXSIS.
+        :param report_name: ReportDescription to get the parameter details for. Case sensitive, and is the string from
+        the report page
+        :return: List of dictionaries of the parameter definitions. If the report name isn't found, then return None.
         """
         logger.info("Getting report {}", report_name)
         self._get_client_id()
@@ -227,10 +228,27 @@ class Axsis:
         response = self.session.get('https://webportal1.atsol.com/Axsis.Web/api/Report/GetReportsDetail',
                                     headers=headers,
                                     params=params)
-        return self._pythonify_literal(response.content.decode())
+        ret: ReportsDetailType = cast(ReportsDetailType, self._pythonify_literal(response.content.decode()))
+        if ret.get('Message') and 'No HTTP resource was found that matches the request URI' in ret['Message']:
+            # We requested an invalid report name
+            return None
+        return ret
+
+    def get_location_info(self, location_id: str) -> Optional[str]:
+        """
+        Gets the location information (address) of a camera based on its ID
+        :param location_id: the location identifier of the camera (IE BAL101)
+        """
+        report = self.get_reports_detail('LOCATION PERFORMANCE DETAIL')
+        for param_data in report.get('Parameters'):
+            if param_data.get('ParmDataType') == 'PICKLIST':
+                for param_list in param_data.get('ParmList'):
+                    if param_list.get('Value') == location_id:
+                        return param_list.get('Description').split(' - ')[1]
+        return None
 
     @staticmethod
-    def _pythonify_literal(obj_str: str):
+    def _pythonify_literal(obj_str: str) -> Dict:
         """
         Takes a string with a python dictionary and/or list and handles json->python
         :param obj_str: A string with a data structure in it
@@ -242,7 +260,7 @@ class Axsis:
         return ast.literal_eval(obj_str)
 
     @staticmethod
-    def _depythonify_literal(obj):
+    def _depythonify_literal(obj: Dict) -> str:
         """
         Takes a python object and converts it from python->json
         :param obj: Some python object that needs to be jsonified
