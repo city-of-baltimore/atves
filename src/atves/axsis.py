@@ -262,7 +262,7 @@ class Axsis:
         return ast.literal_eval(obj_str)
 
     @staticmethod
-    def _depythonify_literal(obj: Dict) -> str:
+    def _depythonify_literal(obj: ReportsDetailType) -> str:
         """
         Takes a python object and converts it from python->json
         :param obj: Some python object that needs to be jsonified
