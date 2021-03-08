@@ -298,17 +298,28 @@ class AtvesDatabase:
         logger.info('Processing traffic count data from {} to {}', start_date.strftime("%m/%d/%y"),
                     end_date.strftime("%m/%d/%y"))
 
-        # Get data from speed cameras
-        axsis_data = self.axsis_interface.get_traffic_counts(start_date, end_date)
-        axsis_data = axsis_data.to_dict('index')
-        columns = axsis_data[0].keys() - ['Location code', 'Description', 'First Traf Evt', 'Last Traf Evt']
+        # Get data from speed cameras. There are issues pulling more than 90 days of data, so we split if its larger
+        tmp_start_date = start_date
+        tmp_end_date = start_date + timedelta(days=90)
+        while True:
 
-        for row in axsis_data.values():
-            for event_date in columns:
-                if not math.isnan(row[event_date]):
-                    self._insert_or_update(AtvesTrafficCounts(locationcode=str(row['Location code']).strip(),
-                                                              date=datetime.strptime(event_date, '%m/%d/%Y').date(),
-                                                              count=int(row[event_date])))
+            axsis_data = self.axsis_interface.get_traffic_counts(tmp_start_date, tmp_end_date)
+            axsis_data = axsis_data.to_dict('index')
+            columns = axsis_data[0].keys() - ['Location code', 'Description', 'First Traf Evt', 'Last Traf Evt']
+
+            for row in axsis_data.values():
+                for event_date in columns:
+                    if not math.isnan(row[event_date]):
+                        self._insert_or_update(AtvesTrafficCounts(locationcode=str(row['Location code']).strip(),
+                                                                  date=datetime.strptime(event_date, '%m/%d/%Y').date(),
+                                                                  count=int(row[event_date])))
+            tmp_start_date = tmp_start_date + timedelta(days=91)
+            if tmp_start_date > end_date:
+                break
+
+            tmp_end_date = tmp_start_date + timedelta(days=90)
+            if tmp_end_date > end_date:
+                tmp_end_date = end_date
 
         # Get data from red light cameras
         conduent_data = self.conduent_interface.get_traffic_counts_by_location(start_date, end_date)

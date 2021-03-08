@@ -6,8 +6,9 @@ from datetime import date
 def test_axsis_get_traffic_counts(axsis_fixture):
     """Test suite get_traffic_counts"""
     start_date = date(2020, 11, 1)
-    end_date = date(2020, 11, 30)
+    end_date = date(2020, 12, 5)
     ret = axsis_fixture.get_traffic_counts(start_date, end_date)
+    assert len(ret.columns) == 39  # 35 date columns plus location code, description, first and last traf evt
     assert len(ret) > 150
 
 

@@ -43,14 +43,16 @@ class Axsis:
         :param end_date: Last date to search, inclusive
         :return: Pandas data frame with the resulting data
         """
-        logger.info("Getting traffic counts from {} to {}", start_date, end_date)
+        logger.info('Getting traffic counts from {} to {}', start_date, end_date)
+        if (end_date - start_date).days > 90:
+            logger.warning('Axsis has issues generating reports with over 90 days of content')
         headers = {
             'Accept': 'application/json, text/javascript, */*; q=0.01',
             'Content-Type': 'application/json;charset=UTF-8',
             'Origin': 'https://webportal1.atsol.com',
         }
 
-        parameters = self.get_reports_detail("SITE ACTIVITY BY TRAFFIC EVENTS")
+        parameters: ReportsDetailType = self.get_reports_detail("SITE ACTIVITY BY TRAFFIC EVENTS")
         parameters['Parameters'][1]["ParmValue"] = start_date.strftime("%m/%d/%Y")
         parameters['Parameters'][2]["ParmValue"] = end_date.strftime("%m/%d/%Y")
 

@@ -25,7 +25,7 @@ parser.add_argument('-t', '--tc', action='store_true', help="Process only traffi
 parser.add_argument('-b', '--builddb', action='store_true', help="Rebuilds (or updates) the camera location database")
 
 args = parser.parse_args()
-ad = AtvesDatabase(conn_str='Driver={SQL Server};Server=balt-sql311-prd;Database=DOT_DATA;Trusted_Connection=yes;')
+ad = AtvesDatabase(conn_str='mssql+pyodbc://balt-sql311-prd/DOT_DATA?driver=ODBC Driver 17 for SQL Server')
 
 start_date = date(args.year, args.month, args.day)
 end_date = (date(args.year, args.month, args.day) + timedelta(days=args.numofdays - 1))
