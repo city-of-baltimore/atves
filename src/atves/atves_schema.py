@@ -46,7 +46,6 @@ class AtvesCamLocations(Base):
     status = Column(Boolean)
 
     TrafficCounts = relationship('AtvesTrafficCounts')
-    TicketCameras = relationship('AtvesTicketCameras')
     AmberTimeRejects = relationship('AtvesAmberTimeRejects')
     AtvesByLocation = relationship('AtvesByLocation')
 
