@@ -37,7 +37,7 @@ class AtvesCamLocations(Base):
     __tablename__ = "atves_cam_locations"
 
     location_code = Column(String(length=100), primary_key=True)
-    locationdescription = Column(String(length=100), nullable=False)
+    locationdescription = Column(String(length=100), primary_key=True)
     lat = Column(Numeric(precision=6, scale=4), nullable=False)
     long = Column(Numeric(precision=6, scale=4), nullable=False)
     cam_type = Column(String(length=2), nullable=False)
