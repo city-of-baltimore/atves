@@ -13,9 +13,8 @@ class AtvesTrafficCounts(Base):
     """Table holding the traffic counts from the speed cameras"""
     __tablename__ = "atves_traffic_counts"
 
-    id = Column(String(length=110), primary_key=True)
-    location_code = Column(String(length=100), ForeignKey('atves_cam_locations.location_code'))
-    date = Column(Date)
+    location_code = Column(String(length=100), ForeignKey('atves_cam_locations.location_code'), primary_key=True)
+    date = Column(Date, primary_key=True)
     count = Column(Integer)
 
 
@@ -26,7 +25,7 @@ class AtvesTicketCameras(Base):
     id = Column(Integer, primary_key=True)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
-    location = Column(String(length=100), ForeignKey('atves_cam_locations.locationdescription'), nullable=False)
+    location = Column(String(length=100), nullable=False)
     officer = Column(String)
     equip_type = Column(String(length=10), primary_key=True)
     issued = Column(Integer, nullable=False)
@@ -38,7 +37,7 @@ class AtvesCamLocations(Base):
     __tablename__ = "atves_cam_locations"
 
     location_code = Column(String(length=100), primary_key=True)
-    locationdescription = Column(String(length=100), primary_key=True)
+    locationdescription = Column(String(length=100), nullable=False)
     lat = Column(Numeric(precision=6, scale=4), nullable=False)
     long = Column(Numeric(precision=6, scale=4), nullable=False)
     cam_type = Column(String(length=2), nullable=False)

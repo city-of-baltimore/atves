@@ -310,11 +310,8 @@ class AtvesDatabase:
             for row in axsis_data.values():
                 for event_date in columns:
                     if not math.isnan(row[event_date]):
-                        location_code = str(row['Location code']).strip()
-                        location_date = datetime.strptime(event_date, '%m/%d/%Y').date()
-                        self._insert_or_update(AtvesTrafficCounts(id='{}-{}'.format(location_code, location_date),
-                                                                  location_code=location_code,
-                                                                  date=location_date,
+                        self._insert_or_update(AtvesTrafficCounts(location_code=str(row['Location code']).strip(),
+                                                                  date=datetime.strptime(event_date, '%m/%d/%Y').date(),
                                                                   count=int(row[event_date])))
             tmp_start_date = tmp_start_date + timedelta(days=91)
             if tmp_start_date > end_date:
@@ -327,11 +324,8 @@ class AtvesDatabase:
         # Get data from red light cameras
         conduent_data = self.conduent_interface.get_traffic_counts_by_location(start_date, end_date)
         for _, row in conduent_data.iterrows():
-            location_code = str(row['iLocationCode']).strip()
-            location_date = datetime.strptime(row['Ddate'], '%m/%d/%Y').date()
-            self._insert_or_update(AtvesTrafficCounts(id='{}-{}'.format(location_code, location_date),
-                                                      location_code=location_code,
-                                                      date=location_date,
+            self._insert_or_update(AtvesTrafficCounts(location_code=str(row['iLocationCode']).strip(),
+                                                      date=datetime.strptime(row['Ddate'], '%m/%d/%Y').date(),
                                                       count=int(row['VehPass'])))
 
     def _insert_or_update(self, insert_obj: DeclarativeMeta, identity_insert=False) -> None:
