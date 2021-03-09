@@ -13,8 +13,9 @@ class AtvesTrafficCounts(Base):
     """Table holding the traffic counts from the speed cameras"""
     __tablename__ = "atves_traffic_counts"
 
-    location_code = Column(String(length=100), ForeignKey('atves_cam_locations.location_code'), primary_key=True)
-    date = Column(Date, primary_key=True)
+    id = Column(String(length=110), primary_key=True)
+    location_code = Column(String(length=100), ForeignKey('atves_cam_locations.location_code'))
+    date = Column(Date)
     count = Column(Integer)
 
 
