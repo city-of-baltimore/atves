@@ -70,7 +70,7 @@ class AtvesApprovalByReviewDateDetails(Base):
     disapproved = Column(Integer, nullable=False)
     approved = Column(Integer, nullable=False)
     officer = Column(String(length=100))
-    citation_no = Column(String, primary_key=True)
+    citation_no = Column(String(length=20), primary_key=True)
     violation_date = Column(DateTime)
     review_status = Column(String(length=20))
     review_datetime = Column(DateTime)
