@@ -6,17 +6,27 @@ from typing import Optional
 
 from balt_geocoder.geocoder import APIFatalError, Geocoder
 from loguru import logger
-from sqlalchemy import create_engine, inspect as sqlalchemyinspect  # type: ignore
+from sqlalchemy import create_engine, event, inspect as sqlalchemyinspect  # type: ignore
 from sqlalchemy.exc import IntegrityError  # type: ignore
 from sqlalchemy.ext.declarative import DeclarativeMeta  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 from sqlalchemy.sql import text  # type: ignore
+from sqlalchemy.engine import Engine  # type: ignore
+from sqlite3 import Connection as SQLite3Connection
 
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesApprovalByReviewDateDetails, AtvesByLocation, \
     AtvesCamLocations, AtvesTicketCameras, AtvesTrafficCounts, Base
 from atves.axsis import Axsis
 from atves.conduent import Conduent, ALLCAMS, REDLIGHT, OVERHEIGHT
 from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDUENT_PASSWORD, GAPI
+
+
+@event.listens_for(Engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, connection_record):
+    if isinstance(dbapi_connection, SQLite3Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON;")
+        cursor.close()
 
 
 class AtvesDatabase:
