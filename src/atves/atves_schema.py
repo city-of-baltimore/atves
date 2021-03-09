@@ -13,7 +13,7 @@ class AtvesTrafficCounts(Base):
     """Table holding the traffic counts from the speed cameras"""
     __tablename__ = "atves_traffic_counts"
 
-    locationcode = Column(String(length=100), ForeignKey('atves_cam_locations.locationcode'), primary_key=True)
+    location_code = Column(String(length=100), ForeignKey('atves_cam_locations.location_code'), primary_key=True)
     date = Column(Date, primary_key=True)
     count = Column(Integer)
 
@@ -36,7 +36,7 @@ class AtvesCamLocations(Base):
     """The camera location database looks like this"""
     __tablename__ = "atves_cam_locations"
 
-    locationcode = Column(String(length=100), primary_key=True)
+    location_code = Column(String(length=100), primary_key=True)
     locationdescription = Column(String(length=100), nullable=False)
     lat = Column(Numeric(precision=6, scale=4), nullable=False)
     long = Column(Numeric(precision=6, scale=4), nullable=False)
@@ -55,7 +55,7 @@ class AtvesAmberTimeRejects(Base):
     """get_amber_time_rejects_report (red light only)"""
     __tablename__ = "atves_amber_time_rejects"
 
-    location_code = Column(String(length=100), ForeignKey('atves_cam_locations.locationcode'))
+    location_code = Column(String(length=100), ForeignKey('atves_cam_locations.location_code'))
     deployment_no = Column(Integer, nullable=False)
     violation_date = Column(DateTime, nullable=False)
     amber_time = Column(Numeric(precision=5, scale=3), nullable=False)
@@ -81,7 +81,7 @@ class AtvesByLocation(Base):
     __tablename__ = "atves_by_location"
 
     date = Column(Date, primary_key=True)
-    location_code = Column(String(length=100), ForeignKey('atves_cam_locations.locationcode'), primary_key=True)
+    location_code = Column(String(length=100), ForeignKey('atves_cam_locations.location_code'), primary_key=True)
     section = Column(String(length=20))
     details = Column(String(length=100))
     percentage_desc = Column(String(length=50))
