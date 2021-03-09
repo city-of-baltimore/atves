@@ -25,7 +25,7 @@ class AtvesTicketCameras(Base):
     id = Column(Integer, primary_key=True)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
-    location = Column(String(length=100), nullable=False)
+    location = Column(String(length=100), ForeignKey('atves_cam_locations.locationdescription'), nullable=False)
     officer = Column(String)
     equip_type = Column(String(length=10), primary_key=True)
     issued = Column(Integer, nullable=False)
@@ -37,7 +37,7 @@ class AtvesCamLocations(Base):
     __tablename__ = "atves_cam_locations"
 
     location_code = Column(String(length=100), primary_key=True)
-    locationdescription = Column(String(length=100), nullable=False)
+    locationdescription = Column(String(length=100), nullable=False, unique=True)
     lat = Column(Numeric(precision=6, scale=4), nullable=False)
     long = Column(Numeric(precision=6, scale=4), nullable=False)
     cam_type = Column(String(length=2), nullable=False)
@@ -46,6 +46,7 @@ class AtvesCamLocations(Base):
     status = Column(Boolean)
 
     TrafficCounts = relationship('AtvesTrafficCounts')
+    TicketCameras = relationship('AtvesTicketCameras')
     AmberTimeRejects = relationship('AtvesAmberTimeRejects')
     AtvesByLocation = relationship('AtvesByLocation')
 
