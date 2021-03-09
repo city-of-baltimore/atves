@@ -53,9 +53,9 @@ class AtvesDatabase:
             # Look for missing location ids
             location_codes = session.query(AtvesAmberTimeRejects.location_code).all()
             location_codes += session.query(AtvesByLocation.location_code).all()
-            location_codes += session.query(AtvesTrafficCounts.locationcode).all()
+            location_codes += session.query(AtvesTrafficCounts.location_code).all()
 
-            existing_location_codes = session.query(AtvesCamLocations.locationcode).all()
+            existing_location_codes = session.query(AtvesCamLocations.location_code).all()
 
             diff = list(set(location_codes) - set(existing_location_codes))
             if diff:
@@ -85,7 +85,7 @@ class AtvesDatabase:
             try:
                 geo = self.geocoder.geocode("{}, Baltimore, MD".format(ret['location']))
                 self._insert_or_update(AtvesCamLocations(
-                    locationcode=str(ret['site_code']),
+                    location_code=str(ret['site_code']),
                     locationdescription=str(ret['location']),
                     lat=geo.get('latitude') if geo else None,
                     long=geo.get('longitude') if geo else None,
@@ -102,7 +102,7 @@ class AtvesDatabase:
 
         for location_code, location in oh_list:
             geo = self.geocoder.geocode("{}, Baltimore, MD".format(location))
-            self._insert_or_update(AtvesCamLocations(locationcode=location_code,
+            self._insert_or_update(AtvesCamLocations(location_code=location_code,
                                                      locationdescription=location,
                                                      lat=geo.get('latitude') if geo else None,
                                                      long=geo.get('longitude') if geo else None,
@@ -121,11 +121,11 @@ class AtvesDatabase:
                                                                             end_date=date.today())\
                 .get('Location code').to_list()
 
-            location_codes_needed += session.query(AtvesTrafficCounts.locationcode). \
-                filter(AtvesTrafficCounts.locationcode.like('BAL%')).all()
+            location_codes_needed += session.query(AtvesTrafficCounts.location_code). \
+                filter(AtvesTrafficCounts.location_code.like('BAL%')).all()
 
-            location_codes_existing = session.query(AtvesCamLocations.locationcode). \
-                filter(AtvesCamLocations.locationcode.like('BAL%')).all()
+            location_codes_existing = session.query(AtvesCamLocations.location_code). \
+                filter(AtvesCamLocations.location_code.like('BAL%')).all()
 
             diff = set(location_codes_needed) - set(location_codes_existing)
 
@@ -135,7 +135,7 @@ class AtvesDatabase:
 
                 # First, lets get a date when this camera existed
                 traffic_counts = session.query(AtvesTrafficCounts.date). \
-                    filter(AtvesTrafficCounts.locationcode == location_code).all()
+                    filter(AtvesTrafficCounts.location_code == location_code).all()
 
                 if traffic_counts:
                     cam_date: Optional[datetime] = datetime.strptime(traffic_counts[0][1], "%Y-%m-%d")
@@ -151,7 +151,7 @@ class AtvesDatabase:
                 geo = self.geocoder.geocode("{}, Baltimore, MD".format(location))
                 lat = geo.get('latitude') if geo else None
                 lng = geo.get('longitude') if geo else None
-                self._insert_or_update(AtvesCamLocations(locationcode=location_code,
+                self._insert_or_update(AtvesCamLocations(location_code=location_code,
                                                          locationdescription=location,
                                                          lat=lat,
                                                          long=lng,
@@ -310,7 +310,7 @@ class AtvesDatabase:
             for row in axsis_data.values():
                 for event_date in columns:
                     if not math.isnan(row[event_date]):
-                        self._insert_or_update(AtvesTrafficCounts(locationcode=str(row['Location code']).strip(),
+                        self._insert_or_update(AtvesTrafficCounts(location_code=str(row['Location code']).strip(),
                                                                   date=datetime.strptime(event_date, '%m/%d/%Y').date(),
                                                                   count=int(row[event_date])))
             tmp_start_date = tmp_start_date + timedelta(days=91)
@@ -324,7 +324,7 @@ class AtvesDatabase:
         # Get data from red light cameras
         conduent_data = self.conduent_interface.get_traffic_counts_by_location(start_date, end_date)
         for _, row in conduent_data.iterrows():
-            self._insert_or_update(AtvesTrafficCounts(locationcode=str(row['iLocationCode']).strip(),
+            self._insert_or_update(AtvesTrafficCounts(location_code=str(row['iLocationCode']).strip(),
                                                       date=datetime.strptime(row['Ddate'], '%m/%d/%Y').date(),
                                                       count=int(row['VehPass'])))
 
