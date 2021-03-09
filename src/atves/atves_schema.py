@@ -25,7 +25,7 @@ class AtvesTicketCameras(Base):
     id = Column(Integer, primary_key=True)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
-    location = Column(String, ForeignKey('atves_cam_locations.locationdescription'), nullable=False)
+    location = Column(String(length=100), ForeignKey('atves_cam_locations.locationdescription'), nullable=False)
     officer = Column(String)
     equip_type = Column(String(length=10), primary_key=True)
     issued = Column(Integer, nullable=False)
