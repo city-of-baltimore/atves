@@ -48,13 +48,13 @@ def fixture_conn_str(tmpdir):
 
     with Session(bind=engine) as session:
         session.add_all([
-            AtvesTrafficCounts(locationcode='BAL101',
+            AtvesTrafficCounts(location_code='BAL101',
                                date=to_datetime('2020-11-01 00:00:00.000'),
                                count=348),
-            AtvesTrafficCounts(locationcode='BAL101',
+            AtvesTrafficCounts(location_code='BAL101',
                                date=to_datetime('2020-11-02 00:00:00.000'),
                                count=52),
-            AtvesTrafficCounts(locationcode='BAL102',
+            AtvesTrafficCounts(location_code='BAL102',
                                date=to_datetime('2020-11-01 00:00:00.000'),
                                count=33),
             ])
