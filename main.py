@@ -2,8 +2,8 @@
 import argparse
 from datetime import date, timedelta
 
-from atves.atves_database import AtvesDatabase
-from atves.conduent import OVERHEIGHT, REDLIGHT
+from src.atves.atves_database import AtvesDatabase
+from src.atves.conduent import OVERHEIGHT, REDLIGHT
 
 lastmonth = date.today() - timedelta(days=30)
 parser = argparse.ArgumentParser(description='Traffic count importer')
