@@ -48,7 +48,3 @@ if args.rl or all_cams:
     ad.process_conduent_data_by_location(start_date, end_date, REDLIGHT)
     ad.process_conduent_data_amber_time(start_date, end_date)
     ad.process_conduent_data_approval_by_review_date(start_date, end_date, REDLIGHT)
-
-# Build the camera database
-if args.builddb:
-    ad.build_location_db()

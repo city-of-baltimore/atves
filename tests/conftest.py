@@ -31,11 +31,10 @@ def fixture_axsis(axsis_username, axsis_password):
 
 
 @pytest.fixture(name='atvesdb_fixture')
-def fixture_atvesdb(conn_str, axsis_username, axsis_password, conduent_username,  # pylint:disable=too-many-arguments
-                    conduent_password, geocodio_api):
+def fixture_atvesdb(conn_str, axsis_username, axsis_password, conduent_username, conduent_password):
     """ATVES Database object"""
     return atves.atves_database.AtvesDatabase(conn_str, axsis_username, axsis_password, conduent_username,
-                                              conduent_password, geocodio_api)
+                                              conduent_password, None)
 
 
 @pytest.fixture(name='conn_str')
