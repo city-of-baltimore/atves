@@ -389,7 +389,6 @@ class AtvesDatabase:
                         logger.error('Unable to insert object: {}\nError: {}', insert_obj, update_err)
 
             else:
-                import pdb;pdb.set_trace()
                 raise AssertionError('Expected error 2627 or "UNIQUE constraint failed". Got {}'.format(insert_err)) \
                     from insert_err
         finally:
