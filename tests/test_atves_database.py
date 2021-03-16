@@ -9,38 +9,26 @@ from atves.atves_schema import AtvesAmberTimeRejects, AtvesApprovalByReviewDateD
     AtvesCamLocations, AtvesTicketCameras, AtvesTrafficCounts
 
 
-def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, conn_str):
+def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, conn_str):  # pylint:disable=unused-argument
     """Testing _build_db_conduent_red_light"""
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
         ret = session.query(AtvesCamLocations.cam_type).filter(AtvesCamLocations.cam_type == 'RL')
-        assert ret.count() == 0
-
-        atvesdb_fixture._build_db_conduent_red_light()
-        ret = session.query(AtvesCamLocations.cam_type).filter(AtvesCamLocations.cam_type == 'RL')
         assert ret.count() > 100
 
 
-def test_atvesdb_build_db_conduent_overheight(atvesdb_fixture, conn_str):
+def test_atvesdb_build_db_conduent_overheight(atvesdb_fixture, conn_str):  # pylint:disable=unused-argument
     """Testing _build_db_conduent_overheight"""
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
         ret = session.query(AtvesCamLocations.cam_type).filter(AtvesCamLocations.cam_type == 'OH')
-        assert ret.count() == 0
-
-        atvesdb_fixture._build_db_conduent_overheight()
-        ret = session.query(AtvesCamLocations.cam_type).filter(AtvesCamLocations.cam_type == 'OH')
         assert ret.count() > 10
 
 
-def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, conn_str):
+def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, conn_str):  # pylint:disable=unused-argument
     """Testing _build_db_speed_cameras"""
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
-        ret = session.query(AtvesCamLocations.cam_type).filter(AtvesCamLocations.cam_type == 'SC')
-        assert ret.count() == 0
-
-        atvesdb_fixture._build_db_speed_cameras()
         ret = session.query(AtvesCamLocations.cam_type).filter(AtvesCamLocations.cam_type == 'SC')
         assert ret.count() > 10
 

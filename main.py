@@ -25,7 +25,7 @@ parser.add_argument('-t', '--tc', action='store_true', help="Process only traffi
 parser.add_argument('-b', '--builddb', action='store_true', help="Rebuilds (or updates) the camera location database")
 
 args = parser.parse_args()
-ad = AtvesDatabase(conn_str='Driver={SQL Server};Server=balt-sql311-prd;Database=DOT_DATA;Trusted_Connection=yes;')
+ad = AtvesDatabase(conn_str='mssql+pyodbc://balt-sql311-prd/DOT_DATA?driver=ODBC Driver 17 for SQL Server')
 
 start_date = date(args.year, args.month, args.day)
 end_date = (date(args.year, args.month, args.day) + timedelta(days=args.numofdays - 1))
@@ -48,7 +48,3 @@ if args.rl or all_cams:
     ad.process_conduent_data_by_location(start_date, end_date, REDLIGHT)
     ad.process_conduent_data_amber_time(start_date, end_date)
     ad.process_conduent_data_approval_by_review_date(start_date, end_date, REDLIGHT)
-
-# Build the camera database
-if args.builddb:
-    ad.build_location_db()

@@ -31,11 +31,10 @@ def fixture_axsis(axsis_username, axsis_password):
 
 
 @pytest.fixture(name='atvesdb_fixture')
-def fixture_atvesdb(conn_str, axsis_username, axsis_password, conduent_username,  # pylint:disable=too-many-arguments
-                    conduent_password, geocodio_api):
+def fixture_atvesdb(conn_str, axsis_username, axsis_password, conduent_username, conduent_password):
     """ATVES Database object"""
     return atves.atves_database.AtvesDatabase(conn_str, axsis_username, axsis_password, conduent_username,
-                                              conduent_password, geocodio_api)
+                                              conduent_password, None)
 
 
 @pytest.fixture(name='conn_str')
@@ -48,13 +47,13 @@ def fixture_conn_str(tmpdir):
 
     with Session(bind=engine) as session:
         session.add_all([
-            AtvesTrafficCounts(locationcode='BAL101',
+            AtvesTrafficCounts(location_code='BAL101',
                                date=to_datetime('2020-11-01 00:00:00.000'),
                                count=348),
-            AtvesTrafficCounts(locationcode='BAL101',
+            AtvesTrafficCounts(location_code='BAL101',
                                date=to_datetime('2020-11-02 00:00:00.000'),
                                count=52),
-            AtvesTrafficCounts(locationcode='BAL102',
+            AtvesTrafficCounts(location_code='BAL102',
                                date=to_datetime('2020-11-01 00:00:00.000'),
                                count=33),
             ])

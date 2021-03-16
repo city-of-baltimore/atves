@@ -337,11 +337,11 @@ def test_get_daily_self_test(conduent_fixture):
 
 def test_get_pending_client_approval(conduent_fixture):
     """Tests get_pending_client_approval"""
-    ret = conduent_fixture.get_pending_client_approval(atves.conduent.OVERHEIGHT)
-    assert len(ret) > 5
-
     ret = conduent_fixture.get_pending_client_approval(atves.conduent.REDLIGHT)
     assert len(ret) > 5
+
+    ret = conduent_fixture.get_pending_client_approval(atves.conduent.OVERHEIGHT)
+    assert len(ret) > 3
 
     # invalid cam type
     with pytest.raises(AssertionError):
