@@ -1,5 +1,7 @@
 """Pytest directory-specific hook implementations"""
 import os
+import shutil
+
 import pytest
 from pandas import to_datetime  # type: ignore
 from sqlalchemy import create_engine  # type: ignore
@@ -31,10 +33,16 @@ def fixture_axsis(axsis_username, axsis_password):
 
 
 @pytest.fixture(name='atvesdb_fixture')
-def fixture_atvesdb(conn_str, axsis_username, axsis_password, conduent_username, conduent_password):
+def fixture_atvesdb(tmpdir, conn_str, axsis_username, axsis_password,  # pylint:disable=too-many-arguments
+                    conduent_username, conduent_password, geocodio_api):
     """ATVES Database object"""
-    return atves.atves_database.AtvesDatabase(conn_str, axsis_username, axsis_password, conduent_username,
-                                              conduent_password, None)
+    geofile = os.path.join('tests', 'geofiles', 'geo.pickle')
+    geofile_rev = os.path.join('tests', 'geofiles', 'geo_rev.pickle')
+    shutil.copy(geofile, tmpdir)
+    shutil.copy(geofile_rev, tmpdir)
+    with atves.atves_database.AtvesDatabase(conn_str, axsis_username, axsis_password, conduent_username,
+                                            conduent_password, geocodio_api, geofile, geofile_rev) as atdb:
+        yield atdb
 
 
 @pytest.fixture(name='conn_str')

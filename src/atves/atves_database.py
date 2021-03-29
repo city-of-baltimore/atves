@@ -2,7 +2,7 @@
 import math
 import re
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import List, Optional
 from sqlite3 import Connection as SQLite3Connection
 
 from balt_geocoder.geocoder import APIFatalError, Geocoder
@@ -32,31 +32,48 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):  # pylint:disable=u
 class AtvesDatabase:
     """ Helper class for the Coduent and Axsis classes that inserts data into the relevant databases"""
 
-    def __init__(self, conn_str: str, atves_user: str = AXSIS_USERNAME,  # pylint:disable=too-many-arguments
-                 atves_pass: str = AXSIS_PASSWORD, conduent_user: str = CONDUENT_USERNAME,
-                 conduent_pass: str = CONDUENT_PASSWORD, geocodio_api_key: Optional[str] = GAPI[0]):
+    def __init__(self, conn_str: str, axsis_user: str = AXSIS_USERNAME,  # pylint:disable=too-many-arguments
+                 axsis_pass: str = AXSIS_PASSWORD, conduent_user: str = CONDUENT_USERNAME,
+                 conduent_pass: str = CONDUENT_PASSWORD, geocodio_api_key: Optional[str] = None,
+                 pickle_filename: str = 'geo.pickle', pickle_filename_rev: str = 'geo_rev.pickle'):
         """
         :param conn_str: sqlalchemy connection string (IE sqlite:///crash.db or
         Driver={SQL Server};Server=balt-sql311-prd;Database=DOT_DATA;Trusted_Connection=yes;)
         """
 
         logger.info('Creating db with connection string: {}', conn_str)
+        if geocodio_api_key is None:
+            geocodio_api_keys: List[str] = GAPI
+        else:
+            geocodio_api_keys = [geocodio_api_key]
+
         self.engine = create_engine(conn_str, echo=True, future=True)
 
         with self.engine.begin() as connection:
             Base.metadata.create_all(connection)
 
-        self.axsis_interface = Axsis(username=atves_user, password=atves_pass)
+        self.axsis_interface = Axsis(username=axsis_user, password=axsis_pass)
         self.conduent_interface = Conduent(conduent_user, conduent_pass)
-        self.geocoder = Geocoder(geocodio_api_key) if geocodio_api_key else None
+        self.geocoder = Geocoder(geocodio_api_keys, pickle_filename, pickle_filename_rev) if geocodio_api_keys else None
 
-        self.build_location_db()
+        self.location_db_built = False
 
-    def build_location_db(self) -> None:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        self.geocoder.__exit__()
+
+    def build_location_db(self, force: bool = False) -> None:
         """
         Builds the location database with each camera and their lat/long
+        :param force: If true, then it will rebuild the location db even if it was already built this session
         :return: None
         """
+        if self.location_db_built and not force:
+            # if we already built the db and we are not forcing a rebuild, then bail
+            return
+
         self._build_db_conduent_red_light()
         self._build_db_conduent_overheight()
         self._build_db_speed_cameras()
@@ -80,6 +97,7 @@ class AtvesDatabase:
 
             if diff:
                 raise AssertionError("Missing locations: {}".format(diff))
+        self.location_db_built = True
 
     def _build_db_conduent_red_light(self) -> None:
         """Builds the camera location database for red light cameras"""
@@ -128,20 +146,12 @@ class AtvesDatabase:
         # Get the list of location codes in the traffic count database (AXSIS)
         with Session(bind=self.engine, future=True) as session:
             # get all cameras used in the last 30 days
+            report_details = self.axsis_interface.get_reports_detail('LOCATION PERFORMANCE DETAIL')
+            active_cams = [param_elem['Value'] for param in report_details['Parameters']
+                           if param['ParmTitle'] == 'Violation Locations'
+                           for param_elem in param['ParmList']]
 
-            location_codes_needed = self.axsis_interface.get_traffic_counts(start_date=date.today()-timedelta(days=30),
-                                                                            end_date=date.today())\
-                .get('Location code').to_list()
-
-            location_codes_needed += session.query(AtvesTrafficCounts.location_code). \
-                filter(AtvesTrafficCounts.location_code.like('BAL%')).all()
-
-            location_codes_existing = session.query(AtvesCamLocations.location_code). \
-                filter(AtvesCamLocations.location_code.like('BAL%')).all()
-
-            diff = set(location_codes_needed) - set(location_codes_existing)
-
-            for location_code in diff:
+            for location_code in active_cams:
                 if not location_code:
                     continue
 
@@ -149,11 +159,11 @@ class AtvesDatabase:
                 traffic_counts = session.query(AtvesTrafficCounts.date). \
                     filter(AtvesTrafficCounts.location_code == location_code).all()
 
-                if traffic_counts:
+                try:
                     cam_date: Optional[datetime] = datetime.strptime(traffic_counts[0][1], "%Y-%m-%d")
                     axsis_data = self.axsis_interface.get_traffic_counts(cam_date, cam_date)
                     location = [x for x in axsis_data.values.tolist() if x[0] == location_code][0][1]
-                else:
+                except IndexError:
                     cam_date = None
                     location = self.axsis_interface.get_location_info(location_code)
 
@@ -183,6 +193,7 @@ class AtvesDatabase:
         """
         logger.info('Processing conduent reject reports from {} to {}', start_date.strftime("%m/%d/%y"),
                     end_date.strftime("%m/%d/%y"))
+        self.build_location_db()
         data = self.conduent_interface.get_deployment_data(start_date, end_date, cam_type)
 
         if not data:
@@ -208,6 +219,7 @@ class AtvesDatabase:
         logger.info('Processing conduent amber time report from {} to {}', start_date.strftime("%m/%d/%y"),
                     end_date.strftime("%m/%d/%y"))
 
+        self.build_location_db()
         data = self.conduent_interface.get_amber_time_rejects_report(start_date, end_date)
 
         if data.empty:
@@ -232,6 +244,7 @@ class AtvesDatabase:
         """
         logger.info('Processing conduent data approval report from {} to {}', start_date.strftime("%m/%d/%y"),
                     end_date.strftime("%m/%d/%y"))
+        self.build_location_db()
         data = self.conduent_interface.get_approval_by_review_date_details(start_date, end_date, cam_type)
 
         if data.empty:
@@ -255,6 +268,8 @@ class AtvesDatabase:
         :param end_date: End date of the report to pull
         :return:
         """
+        self.build_location_db()
+
         if cam_type == ALLCAMS:
             self.process_conduent_data_by_location(start_date, end_date, REDLIGHT)
             self.process_conduent_data_by_location(start_date, end_date, OVERHEIGHT)
@@ -309,6 +324,8 @@ class AtvesDatabase:
         """
         logger.info('Processing traffic count data from {} to {}', start_date.strftime("%m/%d/%y"),
                     end_date.strftime("%m/%d/%y"))
+
+        self.build_location_db()
 
         # Get data from speed cameras. There are issues pulling more than 90 days of data, so we split if its larger
         tmp_start_date = start_date
