@@ -19,6 +19,7 @@ setup(
         'loguru~=0.5.3',
         'sqlalchemy~=1.4.3',
         'pyodbc~=4.0.30',
+        'urllib3~=1.26.4',
         'balt-geocoder @ git+https://github.com/city-of-baltimore/Geocoder@v1.0.2#egg=balt-geocoder',
     ],
 )
