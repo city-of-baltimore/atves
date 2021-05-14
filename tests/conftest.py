@@ -1,6 +1,5 @@
 """Pytest directory-specific hook implementations"""
 import os
-import shutil
 
 import pytest
 from pandas import to_datetime  # type: ignore
@@ -32,7 +31,7 @@ def fixture_axsis(axsis_username, axsis_password):
 
 
 @pytest.fixture(name='atvesdb_fixture')
-def fixture_atvesdb(tmpdir, conn_str, axsis_username, axsis_password,  # pylint:disable=too-many-arguments
+def fixture_atvesdb(conn_str, axsis_username, axsis_password,  # pylint:disable=too-many-arguments
                     conduent_username, conduent_password):
     """ATVES Database object"""
     return atves.atves_database.AtvesDatabase(conn_str, axsis_username, axsis_password, conduent_username,
