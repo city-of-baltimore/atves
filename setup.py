@@ -20,6 +20,6 @@ setup(
         'sqlalchemy~=1.4.15',
         'pyodbc~=4.0.30',
         'urllib3~=1.26.4',
-        'arcgis~=1.8.5',
+        'arcgis~=1.8.5.post3',
     ],
 )
