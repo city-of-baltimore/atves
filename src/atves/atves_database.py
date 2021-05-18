@@ -34,6 +34,24 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):  # pylint:disable=u
         cursor.close()
 
 
+def requires_conduent(func):
+    def wrapper(*arg, **kwarg):
+        if not arg[0].conduent_interface:
+            logger.warning('Unable to run {}. It requires a Conduent session, which is not setup. ', func.__name__)
+            return
+        return func(*arg, **kwarg)
+    return wrapper
+
+
+def requires_axsis(func):
+    def wrapper(*arg, **kwarg):
+        if not arg[0].conduent_interface:
+            logger.warning('Unable to run {}. It requires a Conduent session, which is not setup. ', func.__name__)
+            return
+        return func(*arg, **kwarg)
+    return wrapper
+
+
 class AtvesDatabase:
     """ Helper class for the Coduent and Axsis classes that inserts data into the relevant databases"""
 
@@ -50,8 +68,8 @@ class AtvesDatabase:
         with self.engine.begin() as connection:
             Base.metadata.create_all(connection)
 
-        self.axsis_interface = Axsis(username=axsis_user, password=axsis_pass)
-        self.conduent_interface = Conduent(conduent_user, conduent_pass)
+        self.axsis_interface = Axsis(username=axsis_user, password=axsis_pass) if axsis_user and axsis_pass else None
+        self.conduent_interface = Conduent(conduent_user, conduent_pass) if conduent_user and conduent_pass else None
 
         self.location_db_built = False
 
@@ -90,6 +108,7 @@ class AtvesDatabase:
                 raise AssertionError("Missing locations: {}".format(diff))
         self.location_db_built = True
 
+    @requires_conduent
     def _build_db_conduent_red_light(self) -> None:
         """Builds the camera location database for red light cameras"""
         failures = 0
@@ -117,6 +136,7 @@ class AtvesDatabase:
             except RuntimeError as err:
                 logger.warning("Geocoder error: {}", err)
 
+    @requires_conduent
     def _build_db_conduent_overheight(self) -> None:
         """Builds the camera location database for over height cameras"""
         oh_list = self.conduent_interface.get_overheight_cameras()
@@ -132,6 +152,7 @@ class AtvesDatabase:
                                                      speed_limit=None,
                                                      status=None))
 
+    @requires_axsis
     def _build_db_speed_cameras(self) -> None:
         """Builds the camera location database for speed cameras"""
         # Get the list of location codes in the traffic count database (AXSIS)
@@ -171,6 +192,7 @@ class AtvesDatabase:
                                                          speed_limit=None,
                                                          status=None))
 
+    @requires_conduent
     def process_conduent_reject_numbers(self, start_date: date, end_date: date, cam_type=ALLCAMS) -> None:
         """
         Inserts data into the database from conduent rejection numbers
@@ -198,6 +220,7 @@ class AtvesDatabase:
                                                       issued=int(row['issued']),
                                                       rejected=int(row['rejected'])))
 
+    @requires_conduent
     def process_conduent_data_amber_time(self, start_date: date, end_date: date) -> None:
         """
 
@@ -223,6 +246,7 @@ class AtvesDatabase:
                 amber_reject_code=str(row['Amber Reject Code']),
                 event_number=int(row['Event Number'])))
 
+    @requires_conduent
     def process_conduent_data_approval_by_review_date(self, start_date: date, end_date: date, cam_type: int) -> None:
         """
 
@@ -249,6 +273,7 @@ class AtvesDatabase:
                 review_status=str(row['Review Status']),
                 review_datetime=datetime.strptime("{} {}".format(row['Review Date'], row['st']), '%m/%d/%Y %H:%M:%S')))
 
+    @requires_conduent
     def process_conduent_data_by_location(self, start_date: date, end_date: date, cam_type: int = ALLCAMS) -> None:
         """
 
@@ -315,29 +340,37 @@ class AtvesDatabase:
                     end_date.strftime("%m/%d/%y"))
 
         self.build_location_db()
+        self._process_traffic_count_data_axsis(start_date, end_date)
+        self._process_traffic_count_data_conduent(start_date, end_date)
 
-        # Get data from speed cameras. There are issues pulling more than 90 days of data, so we split if its larger
-        tmp_start_date = start_date
-        tmp_end_date = start_date + timedelta(days=90)
-        while True:
+    @requires_axsis
+    def _process_traffic_count_data_axsis(self, start_date: date, end_date: date) -> None:
+        if self.axsis_interface:
+            # Get data from speed cameras. There are issues pulling more than 90 days of data, so we split if its larger
+            tmp_start_date = start_date
+            tmp_end_date = start_date + timedelta(days=90)
+            while True:
 
-            axsis_data = self.axsis_interface.get_traffic_counts(tmp_start_date, tmp_end_date)
-            axsis_data = axsis_data.to_dict('index')
-            columns = axsis_data[0].keys() - ['Location code', 'Description', 'First Traf Evt', 'Last Traf Evt']
+                axsis_data = self.axsis_interface.get_traffic_counts(tmp_start_date, tmp_end_date)
+                axsis_data = axsis_data.to_dict('index')
+                columns = axsis_data[0].keys() - ['Location code', 'Description', 'First Traf Evt', 'Last Traf Evt']
 
-            for row in axsis_data.values():
-                for event_date in columns:
-                    if not math.isnan(row[event_date]):
-                        self._insert_or_update(AtvesTrafficCounts(location_code=str(row['Location code']).strip(),
-                                                                  date=datetime.strptime(event_date, '%m/%d/%Y').date(),
-                                                                  count=int(row[event_date])))
-            tmp_start_date = tmp_start_date + timedelta(days=91)
-            if tmp_start_date > end_date:
-                break
+                for row in axsis_data.values():
+                    for event_date in columns:
+                        if not math.isnan(row[event_date]):
+                            self._insert_or_update(AtvesTrafficCounts(location_code=str(row['Location code']).strip(),
+                                                                      date=datetime.strptime(event_date,
+                                                                                             '%m/%d/%Y').date(),
+                                                                      count=int(row[event_date])))
+                tmp_start_date = tmp_start_date + timedelta(days=91)
+                if tmp_start_date > end_date:
+                    break
 
             # chunk the date range, unless we hit the end_date
             tmp_end_date = min(tmp_start_date + timedelta(days=90), end_date)
 
+    @requires_conduent
+    def _process_traffic_count_data_conduent(self, start_date: date, end_date: date) -> None:
         # Get data from red light cameras
         conduent_data = self.conduent_interface.get_traffic_counts_by_location(start_date, end_date)
         for _, row in conduent_data.iterrows():
