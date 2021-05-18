@@ -34,26 +34,8 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):  # pylint:disable=u
         cursor.close()
 
 
-def requires_conduent(func):
-    def wrapper(*arg, **kwarg):
-        if not arg[0].conduent_interface:
-            logger.warning('Unable to run {}. It requires a Conduent session, which is not setup. ', func.__name__)
-            return
-        return func(*arg, **kwarg)
-    return wrapper
-
-
-def requires_axsis(func):
-    def wrapper(*arg, **kwarg):
-        if not arg[0].conduent_interface:
-            logger.warning('Unable to run {}. It requires a Conduent session, which is not setup. ', func.__name__)
-            return
-        return func(*arg, **kwarg)
-    return wrapper
-
-
 class AtvesDatabase:
-    """ Helper class for the Coduent and Axsis classes that inserts data into the relevant databases"""
+    """ Helper class for the Conduent and Axsis classes that inserts data into the relevant databases"""
 
     def __init__(self, conn_str: str, axsis_user: str = AXSIS_USERNAME,  # pylint:disable=too-many-arguments
                  axsis_pass: str = AXSIS_PASSWORD, conduent_user: str = CONDUENT_USERNAME,
@@ -108,9 +90,13 @@ class AtvesDatabase:
                 raise AssertionError("Missing locations: {}".format(diff))
         self.location_db_built = True
 
-    @requires_conduent
     def _build_db_conduent_red_light(self) -> None:
         """Builds the camera location database for red light cameras"""
+        if not self.conduent_interface:
+            logger.warning('Unable to run _build_db_conduent_red_light. It requires a Conduent session, which is not '
+                           'setup.')
+            return
+
         failures = 0
         loc_id = 0
 
@@ -136,9 +122,13 @@ class AtvesDatabase:
             except RuntimeError as err:
                 logger.warning("Geocoder error: {}", err)
 
-    @requires_conduent
     def _build_db_conduent_overheight(self) -> None:
         """Builds the camera location database for over height cameras"""
+        if not self.conduent_interface:
+            logger.warning('Unable to run _build_db_conduent_overheight. It requires a Conduent session, which is not '
+                           'setup.')
+            return
+
         oh_list = self.conduent_interface.get_overheight_cameras()
 
         for location_code, location in oh_list:
@@ -152,9 +142,12 @@ class AtvesDatabase:
                                                      speed_limit=None,
                                                      status=None))
 
-    @requires_axsis
     def _build_db_speed_cameras(self) -> None:
         """Builds the camera location database for speed cameras"""
+        if not self.axsis_interface:
+            logger.warning('Unable to run _build_db_speed_cameras. It requires a Axsis session, which is not setup.')
+            return
+
         # Get the list of location codes in the traffic count database (AXSIS)
         with Session(bind=self.engine, future=True) as session:
             # get all cameras used in the last 30 days
@@ -192,7 +185,6 @@ class AtvesDatabase:
                                                          speed_limit=None,
                                                          status=None))
 
-    @requires_conduent
     def process_conduent_reject_numbers(self, start_date: date, end_date: date, cam_type=ALLCAMS) -> None:
         """
         Inserts data into the database from conduent rejection numbers
@@ -204,6 +196,12 @@ class AtvesDatabase:
         """
         logger.info('Processing conduent reject reports from {} to {}', start_date.strftime("%m/%d/%y"),
                     end_date.strftime("%m/%d/%y"))
+
+        if not self.conduent_interface:
+            logger.warning('Unable to run process_conduent_reject_numbers. It requires a Conduent session, which is not'
+                           ' setup.')
+            return
+
         self.build_location_db()
         data = self.conduent_interface.get_deployment_data(start_date, end_date, cam_type)
 
@@ -220,7 +218,6 @@ class AtvesDatabase:
                                                       issued=int(row['issued']),
                                                       rejected=int(row['rejected'])))
 
-    @requires_conduent
     def process_conduent_data_amber_time(self, start_date: date, end_date: date) -> None:
         """
 
@@ -230,6 +227,11 @@ class AtvesDatabase:
         """
         logger.info('Processing conduent amber time report from {} to {}', start_date.strftime("%m/%d/%y"),
                     end_date.strftime("%m/%d/%y"))
+
+        if not self.conduent_interface:
+            logger.warning('Unable to run process_conduent_data_amber_time. It requires a Conduent session, which is '
+                           'not setup.')
+            return
 
         self.build_location_db()
         data = self.conduent_interface.get_amber_time_rejects_report(start_date, end_date)
@@ -246,7 +248,6 @@ class AtvesDatabase:
                 amber_reject_code=str(row['Amber Reject Code']),
                 event_number=int(row['Event Number'])))
 
-    @requires_conduent
     def process_conduent_data_approval_by_review_date(self, start_date: date, end_date: date, cam_type: int) -> None:
         """
 
@@ -257,6 +258,12 @@ class AtvesDatabase:
         """
         logger.info('Processing conduent data approval report from {} to {}', start_date.strftime("%m/%d/%y"),
                     end_date.strftime("%m/%d/%y"))
+
+        if not self.conduent_interface:
+            logger.warning('Unable to run process_conduent_data_approval_by_review_date. It requires a Conduent '
+                           'session, which is not setup.')
+            return
+
         self.build_location_db()
         data = self.conduent_interface.get_approval_by_review_date_details(start_date, end_date, cam_type)
 
@@ -273,7 +280,6 @@ class AtvesDatabase:
                 review_status=str(row['Review Status']),
                 review_datetime=datetime.strptime("{} {}".format(row['Review Date'], row['st']), '%m/%d/%Y %H:%M:%S')))
 
-    @requires_conduent
     def process_conduent_data_by_location(self, start_date: date, end_date: date, cam_type: int = ALLCAMS) -> None:
         """
 
@@ -282,6 +288,11 @@ class AtvesDatabase:
         :param end_date: End date of the report to pull
         :return:
         """
+        if not self.conduent_interface:
+            logger.warning('Unable to run process_conduent_data_by_location. It requires a Conduent '
+                           'session, which is not setup.')
+            return
+
         self.build_location_db()
 
         if cam_type == ALLCAMS:
@@ -343,34 +354,41 @@ class AtvesDatabase:
         self._process_traffic_count_data_axsis(start_date, end_date)
         self._process_traffic_count_data_conduent(start_date, end_date)
 
-    @requires_axsis
     def _process_traffic_count_data_axsis(self, start_date: date, end_date: date) -> None:
-        if self.axsis_interface:
-            # Get data from speed cameras. There are issues pulling more than 90 days of data, so we split if its larger
-            tmp_start_date = start_date
-            tmp_end_date = start_date + timedelta(days=90)
-            while True:
+        if not self.axsis_interface:
+            logger.warning('Unable to run _process_traffic_count_data_axsis. It requires a Axsis session, which is not '
+                           'setup.')
+            return
 
-                axsis_data = self.axsis_interface.get_traffic_counts(tmp_start_date, tmp_end_date)
-                axsis_data = axsis_data.to_dict('index')
-                columns = axsis_data[0].keys() - ['Location code', 'Description', 'First Traf Evt', 'Last Traf Evt']
+        # Get data from speed cameras. There are issues pulling more than 90 days of data, so we split if its larger
+        tmp_start_date = start_date
+        tmp_end_date = start_date + timedelta(days=90)
+        while True:
 
-                for row in axsis_data.values():
-                    for event_date in columns:
-                        if not math.isnan(row[event_date]):
-                            self._insert_or_update(AtvesTrafficCounts(location_code=str(row['Location code']).strip(),
-                                                                      date=datetime.strptime(event_date,
-                                                                                             '%m/%d/%Y').date(),
-                                                                      count=int(row[event_date])))
-                tmp_start_date = tmp_start_date + timedelta(days=91)
-                if tmp_start_date > end_date:
-                    break
+            axsis_data = self.axsis_interface.get_traffic_counts(tmp_start_date, tmp_end_date)
+            axsis_data = axsis_data.to_dict('index')
+            columns = axsis_data[0].keys() - ['Location code', 'Description', 'First Traf Evt', 'Last Traf Evt']
+
+            for row in axsis_data.values():
+                for event_date in columns:
+                    if not math.isnan(row[event_date]):
+                        self._insert_or_update(AtvesTrafficCounts(location_code=str(row['Location code']).strip(),
+                                                                  date=datetime.strptime(event_date,
+                                                                                         '%m/%d/%Y').date(),
+                                                                  count=int(row[event_date])))
+            tmp_start_date = tmp_start_date + timedelta(days=91)
+            if tmp_start_date > end_date:
+                break
 
             # chunk the date range, unless we hit the end_date
             tmp_end_date = min(tmp_start_date + timedelta(days=90), end_date)
 
-    @requires_conduent
     def _process_traffic_count_data_conduent(self, start_date: date, end_date: date) -> None:
+        if not self.conduent_interface:
+            logger.warning('Unable to run _process_traffic_count_data_conduent. It requires a Conduent '
+                           'session, which is not setup.')
+            return
+
         # Get data from red light cameras
         conduent_data = self.conduent_interface.get_traffic_counts_by_location(start_date, end_date)
         for _, row in conduent_data.iterrows():
