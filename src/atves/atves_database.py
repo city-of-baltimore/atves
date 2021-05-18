@@ -37,9 +37,9 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):  # pylint:disable=u
 class AtvesDatabase:
     """ Helper class for the Conduent and Axsis classes that inserts data into the relevant databases"""
 
-    def __init__(self, conn_str: str, axsis_user: str = AXSIS_USERNAME,  # pylint:disable=too-many-arguments
-                 axsis_pass: str = AXSIS_PASSWORD, conduent_user: str = CONDUENT_USERNAME,
-                 conduent_pass: str = CONDUENT_PASSWORD):
+    def __init__(self, conn_str: str, axsis_user: Optional[str] = AXSIS_USERNAME,  # pylint:disable=too-many-arguments
+                 axsis_pass: Optional[str] = AXSIS_PASSWORD, conduent_user: Optional[str] = CONDUENT_USERNAME,
+                 conduent_pass: Optional[str] = CONDUENT_PASSWORD):
         """
         :param conn_str: sqlalchemy connection string (IE sqlite:///crash.db or
         Driver={SQL Server};Server=balt-sql311-prd;Database=DOT_DATA;Trusted_Connection=yes;)
@@ -109,7 +109,7 @@ class AtvesDatabase:
                 continue
 
             try:
-                lat, lng = self.get_lat_long("{}, Baltimore, MD".format(ret['location']))
+                lat, lng = self.get_lat_long(ret['location'])
                 self._insert_or_update(AtvesCamLocations(
                     location_code=str(ret['site_code']),
                     locationdescription=str(ret['location']),
@@ -132,7 +132,7 @@ class AtvesDatabase:
         oh_list = self.conduent_interface.get_overheight_cameras()
 
         for location_code, location in oh_list:
-            lat, lng = self.get_lat_long("{}, Baltimore, MD".format(location))
+            lat, lng = self.get_lat_long(location)
             self._insert_or_update(AtvesCamLocations(location_code=location_code,
                                                      locationdescription=location,
                                                      lat=lat,
@@ -175,7 +175,7 @@ class AtvesDatabase:
                 if not location:
                     continue
 
-                lat, lng = self.get_lat_long("{}, Baltimore, MD".format(location))
+                lat, lng = self.get_lat_long(location)
                 self._insert_or_update(AtvesCamLocations(location_code=location_code,
                                                          locationdescription=location,
                                                          lat=lat,
@@ -452,12 +452,12 @@ class AtvesDatabase:
                 session.execute(text('SET IDENTITY_INSERT {} OFF'.format(insert_obj.__tablename__)))
             session.close()
 
-    @staticmethod
-    def get_lat_long(address):
+    def get_lat_long(self, address):
         """
         Get the latitude and longitude for an address if the accuracy score is high enough
         :param address: Street address to search. The more complete the address, the better.
         """
+        address = self._standardize_address(address)
         geo_dict = geocode("{}, Baltimore, MD".format(address))
         lat = None
         lng = None
@@ -465,6 +465,27 @@ class AtvesDatabase:
             lat = geo_dict[0]['location']['x']
             lng = geo_dict[0]['location']['y']
         return lat, lng
+
+    @staticmethod
+    def _standardize_address(street_address: str) -> str:
+        """The original dataset has addresses formatted in various ways. This attempts to standardize them a bit"""
+        street_address = street_address.upper()
+        street_address = street_address.replace(' BLK ', ' ')
+        street_address = street_address.replace(' BLOCK ', ' ')
+        street_address = street_address.replace('JONES FALLS', 'I-83')
+        street_address = street_address.replace('JONES FALLS EXPWY', 'I-83')
+        street_address = street_address.replace('JONES FALLS EXPRESSWAY', 'I-83')
+        street_address = street_address.replace(' HW', ' HWY')
+        street_address = street_address.replace(' SB', '')
+        street_address = street_address.replace(' NB', '')
+        street_address = street_address.replace(' WB', '')
+        street_address = street_address.replace(' EB', '')
+        street_address = re.sub(r'^(\d*) N\.? (.*)', r'\1 NORTH \2', street_address)
+        street_address = re.sub(r'^(\d*) S\.? (.*)', r'\1 SOUTH \2', street_address)
+        street_address = re.sub(r'^(\d*) E\.? (.*)', r'\1 EAST \2', street_address)
+        street_address = re.sub(r'^(\d*) W\.? (.*)', r'\1 WEST \2', street_address)
+
+        return street_address
 
 
 if __name__ == '__main__':

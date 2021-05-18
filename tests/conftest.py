@@ -12,10 +12,10 @@ from atves.atves_schema import AtvesTrafficCounts, Base
 
 def pytest_addoption(parser):
     """Pytest custom arguments"""
-    parser.addoption('--axsis-user', action='store')
-    parser.addoption('--axsis-pass', action='store')
-    parser.addoption('--conduent-user', action='store')
-    parser.addoption('--conduent-pass', action='store')
+    parser.addoption('--axsis-user', action='store', required=True)
+    parser.addoption('--axsis-pass', action='store', required=True)
+    parser.addoption('--conduent-user', action='store', required=True)
+    parser.addoption('--conduent-pass', action='store', required=True)
 
 
 @pytest.fixture(name='conduent_fixture')
@@ -36,6 +36,12 @@ def fixture_atvesdb(conn_str, axsis_username, axsis_password,  # pylint:disable=
     """ATVES Database object"""
     return atves.atves_database.AtvesDatabase(conn_str, axsis_username, axsis_password, conduent_username,
                                               conduent_password)
+
+
+@pytest.fixture(name='atvesdb_fixture_no_creds')
+def fixture_atvesdb_no_credss(conn_str):
+    """ATVES Database object"""
+    return atves.atves_database.AtvesDatabase(conn_str, None, None, None, None)
 
 
 @pytest.fixture(name='conn_str')
