@@ -23,8 +23,8 @@ def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no
                             AtvesCamLocations.lat,
                             AtvesCamLocations.long).filter(AtvesCamLocations.cam_type == 'RL')
         assert ret.count() > 100
-        assert all([-76.73 < i[1] < -76.52 for i in ret.all()])
-        assert all([39.2 < i[2] < 39.38 for i in ret.all()])
+        assert all((-76.73 < i[1] < -76.52 for i in ret.all()))
+        assert all((39.2 < i[2] < 39.38 for i in ret.all()))
 
 
 def test_atvesdb_build_db_conduent_overheight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
@@ -66,8 +66,8 @@ def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_cred
         assert ret.count() > 10
 
         # throw away None results, but make sure its not all of them
-        lats = [-76.73 < i[1] < -76.52 for i in ret.all() if i[1]]
-        lngs = [39.2 < i[2] < 39.38 for i in ret.all() if i[2]]
+        lats = (-76.73 < i[1] < -76.52 for i in ret.all() if i[1])
+        lngs = (39.2 < i[2] < 39.38 for i in ret.all() if i[2])
         assert all(lats)
         assert len(lats) > 10
         assert all(lngs)
