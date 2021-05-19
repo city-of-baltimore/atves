@@ -60,7 +60,7 @@ class Conduent:
         self._get_state_values(resp)
         soup = BeautifulSoup(resp.text, "html.parser")
         if len(soup.find_all('input', {'name': 'txtOTP'})) != 1:
-            raise AssertionError("Login failure")
+            raise AssertionError("Login failure with Conduent")
 
     @retry(exceptions=requests.exceptions.ConnectionError,
            tries=10,

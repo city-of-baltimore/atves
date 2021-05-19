@@ -1,11 +1,13 @@
 """Pulls data through the Conduent and Axsis libraries, and inserts it into the database"""
+import argparse
 import math
 import re
 from datetime import date, datetime, timedelta
-from typing import List, Optional
+from typing import Optional
 from sqlite3 import Connection as SQLite3Connection
 
-from balt_geocoder.geocoder import APIFatalError, Geocoder
+from arcgis.gis import GIS  # type: ignore
+from arcgis.geocoding import geocode  # type: ignore
 from loguru import logger
 from sqlalchemy import create_engine, event, inspect as sqlalchemyinspect  # type: ignore
 from sqlalchemy.exc import IntegrityError  # type: ignore
@@ -18,7 +20,10 @@ from atves.atves_schema import AtvesAmberTimeRejects, AtvesApprovalByReviewDateD
     AtvesCamLocations, AtvesTicketCameras, AtvesTrafficCounts, Base
 from atves.axsis import Axsis
 from atves.conduent import Conduent, ALLCAMS, REDLIGHT, OVERHEIGHT
-from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDUENT_PASSWORD, GAPI
+from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDUENT_PASSWORD
+
+
+GIS()
 
 
 @event.listens_for(Engine, "connect")
@@ -30,39 +35,25 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):  # pylint:disable=u
 
 
 class AtvesDatabase:
-    """ Helper class for the Coduent and Axsis classes that inserts data into the relevant databases"""
+    """ Helper class for the Conduent and Axsis classes that inserts data into the relevant databases"""
 
-    def __init__(self, conn_str: str, axsis_user: str = AXSIS_USERNAME,  # pylint:disable=too-many-arguments
-                 axsis_pass: str = AXSIS_PASSWORD, conduent_user: str = CONDUENT_USERNAME,
-                 conduent_pass: str = CONDUENT_PASSWORD, geocodio_api_key: Optional[str] = None,
-                 pickle_filename: str = 'geo.pickle', pickle_filename_rev: str = 'geo_rev.pickle'):
+    def __init__(self, conn_str: str, axsis_user: Optional[str] = AXSIS_USERNAME,  # pylint:disable=too-many-arguments
+                 axsis_pass: Optional[str] = AXSIS_PASSWORD, conduent_user: Optional[str] = CONDUENT_USERNAME,
+                 conduent_pass: Optional[str] = CONDUENT_PASSWORD):
         """
         :param conn_str: sqlalchemy connection string (IE sqlite:///crash.db or
         Driver={SQL Server};Server=balt-sql311-prd;Database=DOT_DATA;Trusted_Connection=yes;)
         """
-
         logger.info('Creating db with connection string: {}', conn_str)
-        if geocodio_api_key is None:
-            geocodio_api_keys: List[str] = GAPI
-        else:
-            geocodio_api_keys = [geocodio_api_key]
-
         self.engine = create_engine(conn_str, echo=True, future=True)
 
         with self.engine.begin() as connection:
             Base.metadata.create_all(connection)
 
-        self.axsis_interface = Axsis(username=axsis_user, password=axsis_pass)
-        self.conduent_interface = Conduent(conduent_user, conduent_pass)
-        self.geocoder = Geocoder(geocodio_api_keys, pickle_filename, pickle_filename_rev) if geocodio_api_keys else None
+        self.axsis_interface = Axsis(username=axsis_user, password=axsis_pass) if axsis_user and axsis_pass else None
+        self.conduent_interface = Conduent(conduent_user, conduent_pass) if conduent_user and conduent_pass else None
 
         self.location_db_built = False
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *a):
-        self.geocoder.__exit__()
 
     def build_location_db(self, force: bool = False) -> None:
         """
@@ -101,6 +92,11 @@ class AtvesDatabase:
 
     def _build_db_conduent_red_light(self) -> None:
         """Builds the camera location database for red light cameras"""
+        if not self.conduent_interface:
+            logger.warning('Unable to run _build_db_conduent_red_light. It requires a Conduent session, which is not '
+                           'setup.')
+            return
+
         failures = 0
         loc_id = 0
 
@@ -113,29 +109,34 @@ class AtvesDatabase:
                 continue
 
             try:
-                geo = self.geocoder.geocode("{}, Baltimore, MD".format(ret['location'])) if self.geocoder else None
+                lat, lng = self.get_lat_long(ret['location'])
                 self._insert_or_update(AtvesCamLocations(
                     location_code=str(ret['site_code']),
                     locationdescription=str(ret['location']),
-                    lat=geo.get('latitude') if geo else None,
-                    long=geo.get('longitude') if geo else None,
+                    lat=lat,
+                    long=lng,
                     cam_type=str(ret['cam_type']),
                     effective_date=datetime.strptime(ret['effective_date'], '%b %d, %Y'),
                     speed_limit=int(ret['speed_limit']),
                     status=bool(ret['status'] == 'Active')))
-            except (RuntimeError, APIFatalError) as err:
+            except RuntimeError as err:
                 logger.warning("Geocoder error: {}", err)
 
     def _build_db_conduent_overheight(self) -> None:
         """Builds the camera location database for over height cameras"""
+        if not self.conduent_interface:
+            logger.warning('Unable to run _build_db_conduent_overheight. It requires a Conduent session, which is not '
+                           'setup.')
+            return
+
         oh_list = self.conduent_interface.get_overheight_cameras()
 
         for location_code, location in oh_list:
-            geo = self.geocoder.geocode("{}, Baltimore, MD".format(location)) if self.geocoder else None
+            lat, lng = self.get_lat_long(location)
             self._insert_or_update(AtvesCamLocations(location_code=location_code,
                                                      locationdescription=location,
-                                                     lat=geo.get('latitude') if geo else None,
-                                                     long=geo.get('longitude') if geo else None,
+                                                     lat=lat,
+                                                     long=lng,
                                                      cam_type='OH',
                                                      effective_date=None,
                                                      speed_limit=None,
@@ -143,6 +144,10 @@ class AtvesDatabase:
 
     def _build_db_speed_cameras(self) -> None:
         """Builds the camera location database for speed cameras"""
+        if not self.axsis_interface:
+            logger.warning('Unable to run _build_db_speed_cameras. It requires a Axsis session, which is not setup.')
+            return
+
         # Get the list of location codes in the traffic count database (AXSIS)
         with Session(bind=self.engine, future=True) as session:
             # get all cameras used in the last 30 days
@@ -170,9 +175,7 @@ class AtvesDatabase:
                 if not location:
                     continue
 
-                geo = self.geocoder.geocode("{}, Baltimore, MD".format(location)) if self.geocoder else None
-                lat = geo.get('latitude') if geo else None
-                lng = geo.get('longitude') if geo else None
+                lat, lng = self.get_lat_long(location)
                 self._insert_or_update(AtvesCamLocations(location_code=location_code,
                                                          locationdescription=location,
                                                          lat=lat,
@@ -193,6 +196,12 @@ class AtvesDatabase:
         """
         logger.info('Processing conduent reject reports from {} to {}', start_date.strftime("%m/%d/%y"),
                     end_date.strftime("%m/%d/%y"))
+
+        if not self.conduent_interface:
+            logger.warning('Unable to run process_conduent_reject_numbers. It requires a Conduent session, which is not'
+                           ' setup.')
+            return
+
         self.build_location_db()
         data = self.conduent_interface.get_deployment_data(start_date, end_date, cam_type)
 
@@ -219,6 +228,11 @@ class AtvesDatabase:
         logger.info('Processing conduent amber time report from {} to {}', start_date.strftime("%m/%d/%y"),
                     end_date.strftime("%m/%d/%y"))
 
+        if not self.conduent_interface:
+            logger.warning('Unable to run process_conduent_data_amber_time. It requires a Conduent session, which is '
+                           'not setup.')
+            return
+
         self.build_location_db()
         data = self.conduent_interface.get_amber_time_rejects_report(start_date, end_date)
 
@@ -244,6 +258,12 @@ class AtvesDatabase:
         """
         logger.info('Processing conduent data approval report from {} to {}', start_date.strftime("%m/%d/%y"),
                     end_date.strftime("%m/%d/%y"))
+
+        if not self.conduent_interface:
+            logger.warning('Unable to run process_conduent_data_approval_by_review_date. It requires a Conduent '
+                           'session, which is not setup.')
+            return
+
         self.build_location_db()
         data = self.conduent_interface.get_approval_by_review_date_details(start_date, end_date, cam_type)
 
@@ -268,6 +288,11 @@ class AtvesDatabase:
         :param end_date: End date of the report to pull
         :return:
         """
+        if not self.conduent_interface:
+            logger.warning('Unable to run process_conduent_data_by_location. It requires a Conduent '
+                           'session, which is not setup.')
+            return
+
         self.build_location_db()
 
         if cam_type == ALLCAMS:
@@ -326,6 +351,14 @@ class AtvesDatabase:
                     end_date.strftime("%m/%d/%y"))
 
         self.build_location_db()
+        self._process_traffic_count_data_axsis(start_date, end_date)
+        self._process_traffic_count_data_conduent(start_date, end_date)
+
+    def _process_traffic_count_data_axsis(self, start_date: date, end_date: date) -> None:
+        if not self.axsis_interface:
+            logger.warning('Unable to run _process_traffic_count_data_axsis. It requires a Axsis session, which is not '
+                           'setup.')
+            return
 
         # Get data from speed cameras. There are issues pulling more than 90 days of data, so we split if its larger
         tmp_start_date = start_date
@@ -340,15 +373,21 @@ class AtvesDatabase:
                 for event_date in columns:
                     if not math.isnan(row[event_date]):
                         self._insert_or_update(AtvesTrafficCounts(location_code=str(row['Location code']).strip(),
-                                                                  date=datetime.strptime(event_date, '%m/%d/%Y').date(),
+                                                                  date=datetime.strptime(event_date,
+                                                                                         '%m/%d/%Y').date(),
                                                                   count=int(row[event_date])))
             tmp_start_date = tmp_start_date + timedelta(days=91)
             if tmp_start_date > end_date:
                 break
 
-            tmp_end_date = tmp_start_date + timedelta(days=90)
-            if tmp_end_date > end_date:
-                tmp_end_date = end_date
+            # chunk the date range, unless we hit the end_date
+            tmp_end_date = min(tmp_start_date + timedelta(days=90), end_date)
+
+    def _process_traffic_count_data_conduent(self, start_date: date, end_date: date) -> None:
+        if not self.conduent_interface:
+            logger.warning('Unable to run _process_traffic_count_data_conduent. It requires a Conduent '
+                           'session, which is not setup.')
+            return
 
         # Get data from red light cameras
         conduent_data = self.conduent_interface.get_traffic_counts_by_location(start_date, end_date)
@@ -412,3 +451,87 @@ class AtvesDatabase:
             if identity_insert:
                 session.execute(text('SET IDENTITY_INSERT {} OFF'.format(insert_obj.__tablename__)))
             session.close()
+
+    def get_lat_long(self, address):
+        """
+        Get the latitude and longitude for an address if the accuracy score is high enough
+        :param address: Street address to search. The more complete the address, the better.
+        """
+        address = self._standardize_address(address)
+        geo_dict = geocode("{}, Baltimore, MD".format(address))
+        lat = None
+        lng = None
+        if geo_dict and geo_dict[0]['score'] > 90:
+            lat = geo_dict[0]['location']['x']
+            lng = geo_dict[0]['location']['y']
+        return lat, lng
+
+    @staticmethod
+    def _standardize_address(street_address: str) -> str:
+        """The original dataset has addresses formatted in various ways. This attempts to standardize them a bit"""
+        street_address = street_address.upper()
+        street_address = street_address.replace(' BLK ', ' ')
+        street_address = street_address.replace(' BLOCK ', ' ')
+        street_address = street_address.replace('JONES FALLS', 'I-83')
+        street_address = street_address.replace('JONES FALLS EXPWY', 'I-83')
+        street_address = street_address.replace('JONES FALLS EXPRESSWAY', 'I-83')
+        street_address = street_address.replace(' HW', ' HWY')
+        street_address = street_address.replace(' SB', '')
+        street_address = street_address.replace(' NB', '')
+        street_address = street_address.replace(' WB', '')
+        street_address = street_address.replace(' EB', '')
+        street_address = re.sub(r'^(\d*) N\.? (.*)', r'\1 NORTH \2', street_address)
+        street_address = re.sub(r'^(\d*) S\.? (.*)', r'\1 SOUTH \2', street_address)
+        street_address = re.sub(r'^(\d*) E\.? (.*)', r'\1 EAST \2', street_address)
+        street_address = re.sub(r'^(\d*) W\.? (.*)', r'\1 WEST \2', street_address)
+
+        return street_address
+
+
+if __name__ == '__main__':
+    lastmonth = date.today() - timedelta(days=30)
+    parser = argparse.ArgumentParser(description='Traffic count importer')
+    parser.add_argument('-m', '--month', type=int, default=lastmonth.month,
+                        help=('Optional: Month of date we should start searching on (IE: 10 for Oct). Defaults to '
+                              'yesterday if not specified'))
+    parser.add_argument('-d', '--day', type=int, default=lastmonth.day,
+                        help=('Optional: Day of date we should start searching on (IE: 5). Defaults to yesterday if '
+                              'not specified'))
+    parser.add_argument('-y', '--year', type=int, default=lastmonth.year,
+                        help=('Optional: Four digit year we should start searching on (IE: 2020). Defaults to '
+                              'yesterday if not specified'))
+    parser.add_argument('-n', '--numofdays', default=30, type=int,
+                        help='Optional: Number of days to search, including the start date.')
+    parser.add_argument('-a', '--allcams', action='store_true', help="Process all camera types")
+    parser.add_argument('-o', '--oh', action='store_true', help="Process only over height cameras")
+    parser.add_argument('-r', '--rl', action='store_true', help="Process only red light cameras")
+    parser.add_argument('-t', '--tc', action='store_true', help="Process only traffic counts")
+    parser.add_argument('-b', '--builddb', action='store_true',
+                        help="Rebuilds (or updates) the camera location database")
+
+    args = parser.parse_args()
+    ad = AtvesDatabase(conn_str='mssql+pyodbc://balt-sql311-prd/DOT_DATA?driver=ODBC Driver 17 for SQL Server',
+                       axsis_user=AXSIS_USERNAME, axsis_pass=AXSIS_PASSWORD, conduent_user=CONDUENT_USERNAME,
+                       conduent_pass=CONDUENT_PASSWORD)
+
+    _start_date = date(args.year, args.month, args.day)
+    _end_date = (date(args.year, args.month, args.day) + timedelta(days=args.numofdays - 1))
+
+    all_cams = bool(args.allcams or not any([args.oh, args.rl, args.tc]))
+
+    # Process traffic cameras
+    if args.tc or all_cams:
+        ad.process_traffic_count_data(_start_date, _end_date)
+
+    # Process over height cameras
+    if args.oh or all_cams:
+        ad.process_conduent_reject_numbers(_start_date, _end_date, OVERHEIGHT)
+        ad.process_conduent_data_by_location(_start_date, _end_date, OVERHEIGHT)
+        ad.process_conduent_data_approval_by_review_date(_start_date, _end_date, OVERHEIGHT)
+
+    # Process red light cameras
+    if args.rl or all_cams:
+        ad.process_conduent_reject_numbers(_start_date, _end_date, REDLIGHT)
+        ad.process_conduent_data_by_location(_start_date, _end_date, REDLIGHT)
+        ad.process_conduent_data_amber_time(_start_date, _end_date)
+        ad.process_conduent_data_approval_by_review_date(_start_date, _end_date, REDLIGHT)

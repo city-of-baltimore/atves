@@ -11,4 +11,4 @@ jobs:
       - name: Tox
         run: |
           pip install tox
-          tox -- --axsis-user '${{ secrets.AXSIS_USERNAME }}' --axsis-pass '${{ secrets.AXSIS_PASSWORD }}' --conduent-user '${{ secrets.CONDUENT_USERNAME }}' --conduent-pass '${{ secrets.CONDUENT_PASSWORD }}' --geocodio-key '${{ secrets.GEOCODIO_API_KEY }}'
+          tox -- --axsis-user '${{ secrets.AXSIS_USERNAME }}' --axsis-pass '${{ secrets.AXSIS_PASSWORD }}' --conduent-user '${{ secrets.CONDUENT_USERNAME }}' --conduent-pass '${{ secrets.CONDUENT_PASSWORD }}'

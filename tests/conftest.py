@@ -1,6 +1,5 @@
 """Pytest directory-specific hook implementations"""
 import os
-import shutil
 
 import pytest
 from pandas import to_datetime  # type: ignore
@@ -13,11 +12,10 @@ from atves.atves_schema import AtvesTrafficCounts, Base
 
 def pytest_addoption(parser):
     """Pytest custom arguments"""
-    parser.addoption('--axsis-user', action='store')
-    parser.addoption('--axsis-pass', action='store')
-    parser.addoption('--conduent-user', action='store')
-    parser.addoption('--conduent-pass', action='store')
-    parser.addoption('--geocodio-key', action='store')
+    parser.addoption('--axsis-user', action='store', required=True)
+    parser.addoption('--axsis-pass', action='store', required=True)
+    parser.addoption('--conduent-user', action='store', required=True)
+    parser.addoption('--conduent-pass', action='store', required=True)
 
 
 @pytest.fixture(name='conduent_fixture')
@@ -33,16 +31,17 @@ def fixture_axsis(axsis_username, axsis_password):
 
 
 @pytest.fixture(name='atvesdb_fixture')
-def fixture_atvesdb(tmpdir, conn_str, axsis_username, axsis_password,  # pylint:disable=too-many-arguments
-                    conduent_username, conduent_password, geocodio_api):
+def fixture_atvesdb(conn_str, axsis_username, axsis_password,  # pylint:disable=too-many-arguments
+                    conduent_username, conduent_password):
     """ATVES Database object"""
-    geofile = os.path.join('tests', 'geofiles', 'geo.pickle')
-    geofile_rev = os.path.join('tests', 'geofiles', 'geo_rev.pickle')
-    shutil.copy(geofile, tmpdir)
-    shutil.copy(geofile_rev, tmpdir)
-    with atves.atves_database.AtvesDatabase(conn_str, axsis_username, axsis_password, conduent_username,
-                                            conduent_password, geocodio_api, geofile, geofile_rev) as atdb:
-        yield atdb
+    return atves.atves_database.AtvesDatabase(conn_str, axsis_username, axsis_password, conduent_username,
+                                              conduent_password)
+
+
+@pytest.fixture(name='atvesdb_fixture_no_creds')
+def fixture_atvesdb_no_credss(conn_str):
+    """ATVES Database object"""
+    return atves.atves_database.AtvesDatabase(conn_str, None, None, None, None)
 
 
 @pytest.fixture(name='conn_str')
@@ -90,9 +89,3 @@ def fixture_conduent_username(request):
 def fixture_conduent_password(request):
     """The password to login to Conduent"""
     return request.config.getoption('--conduent-pass')
-
-
-@pytest.fixture(name='geocodio_api')
-def fixture_geocodio_key(request):
-    """The API key for Geocodio"""
-    return request.config.getoption('--geocodio-key')
