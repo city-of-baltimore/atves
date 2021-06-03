@@ -1,15 +1,17 @@
 """Python wrapper around the Axsis Mobility Platform"""
 import ast
 from datetime import date, timedelta
+from enum import Enum
+from io import BytesIO
 from typing import cast, Dict, Optional
 
 import pandas as pd  # type: ignore
 import requests
-from urllib3 import util  # type: ignore
 import xlrd  # type: ignore
 from bs4 import BeautifulSoup  # type: ignore
 from loguru import logger
 from retry import retry
+from urllib3 import util  # type: ignore
 
 from atves.axsis_types import ReportsDetailType
 
@@ -17,6 +19,24 @@ ACCEPT_HEADER = ("text/html,application/xhtml+xml,application/xml;q=0.9,image/we
                  "signed-exchange;v=b3;q=0.9")
 
 util.ssl_.DEFAULT_CIPHERS = 'ALL:@SECLEVEL=1'
+
+
+# Report types
+class Reports(Enum):
+    """Defines used for Axsis._get_report"""
+    TRAFFIC_COUNTS = 1
+    LOCATION_SUMMARY = 2
+
+
+def log_and_validate_params(func):
+    """Adds logging to the beginning of functions that call _get_report"""
+    def wrapper(self, start_date, end_date, *args, **kwargs):
+        logger.info('Getting data for {} from {} to {}', func.__name__, start_date, end_date)
+        if (end_date - start_date).days > 90:
+            logger.warning('Axsis has issues generating reports with over 90 days of content')
+        return func(self, start_date, end_date, *args, **kwargs)
+
+    return wrapper
 
 
 class Axsis:
@@ -36,31 +56,25 @@ class Axsis:
         self.client_code = None
         self._login()
 
-    @retry(exceptions=(requests.exceptions.ConnectionError, xlrd.biffh.XLRDError),
-           tries=10,
-           delay=10)
-    def get_traffic_counts(self, start_date: date, end_date: date) -> pd.DataFrame:
-        """
-        Get the 'Site activity by traffic events' report
-        :param start_date: First date to search, inclusive
-        :param end_date: Last date to search, inclusive
-        :return: Pandas data frame with the resulting data
-        """
-        logger.info('Getting traffic counts from {} to {}', start_date, end_date)
-        if (end_date - start_date).days > 90:
-            logger.warning('Axsis has issues generating reports with over 90 days of content')
-        headers = {
-            'Accept': 'application/json, text/javascript, */*; q=0.01',
-            'Content-Type': 'application/json;charset=UTF-8',
-            'Origin': 'https://webportal1.atsol.com',
+    def _get_report(self, parameters: ReportsDetailType, report_type: Reports) -> requests.Response:
+        reports = {
+            Reports.TRAFFIC_COUNTS: {
+                'desc': 'SITE ACTIVITY BY TRAFFIC EVENTS',
+                'filename': ('http://biportal/enterprisereportingservices/Reports/'
+                             'AXSIS Report/Site_Activity_by_Traffic_Events_AXSIS.rdl'),
+            },
+            Reports.LOCATION_SUMMARY: {
+                'desc': 'LOCATION PERFORMANCE SUMMARY BY LANE -- XML',
+                'filename': 'REPORT_LPSL.XML',
+            }
         }
 
-        parameters: ReportsDetailType = self.get_reports_detail("SITE ACTIVITY BY TRAFFIC EVENTS")
-        parameters['Parameters'][1]["ParmValue"] = start_date.strftime("%m/%d/%Y")
-        parameters['Parameters'][2]["ParmValue"] = end_date.strftime("%m/%d/%Y")
-
         response = self.session.post('https://webportal1.atsol.com/Axsis.Web/api/Report/PostCacheReportFile',
-                                     headers=headers, data=self._depythonify_literal(parameters))
+                                     headers={
+                                         'Accept': 'application/json, text/javascript, */*; q=0.01',
+                                         'Content-Type': 'application/json;charset=UTF-8',
+                                         'Origin': 'https://webportal1.atsol.com',
+                                     }, data=self._depythonify_literal(parameters))
 
         guid = response.content[1:-1]
 
@@ -71,19 +85,58 @@ class Axsis:
         params = (
             ('user', self.username),
             ('guid', guid),
-            ('filename',
-             ("http://biportal/enterprisereportingservices/"
-              "Reports/AXSIS Report/Site_Activity_by_Traffic_Events_AXSIS.rdl")),
-            ('description', 'SITE ACTIVITY BY TRAFFIC EVENTS'),
+            ('filename', reports[report_type]['filename']),
+            ('description', reports[report_type]['desc'])
         )
 
-        response = self.session.get('https://webportal1.atsol.com/Axsis.Web/Report/ReportFile', headers=headers,
-                                    params=params)
+        return self.session.get('https://webportal1.atsol.com/Axsis.Web/Report/ReportFile',
+                                headers=headers, params=params)
+
+    @retry(exceptions=(requests.exceptions.ConnectionError, xlrd.biffh.XLRDError),
+           tries=10,
+           delay=10)
+    @log_and_validate_params
+    def get_traffic_counts(self, start_date: date, end_date: date) -> pd.DataFrame:
+        """
+        Get the 'Site activity by traffic events' report
+        :param start_date: First date to search, inclusive
+        :param end_date: Last date to search, inclusive
+        :return: Pandas data frame with the resulting data
+        """
+        parameters: ReportsDetailType = self.get_reports_detail("SITE ACTIVITY BY TRAFFIC EVENTS")
+        parameters['Parameters'][1]["ParmValue"] = start_date.strftime("%m/%d/%Y")
+        parameters['Parameters'][2]["ParmValue"] = end_date.strftime("%m/%d/%Y")
+
+        response = self._get_report(parameters, Reports.TRAFFIC_COUNTS)
 
         columns = ['Location code', 'Description', 'First Traf Evt', 'Last Traf Evt'] + \
                   [(start_date + timedelta(days=x)).strftime("%m/%d/%Y")
                    for x in range((end_date - start_date).days + 1)]
         return pd.read_excel(response.content, skiprows=[0, 1], names=columns)
+
+    @retry(exceptions=(requests.exceptions.ConnectionError, xlrd.biffh.XLRDError),
+           tries=10,
+           delay=10)
+    def get_location_summary_by_lane(self, start_date: date, end_date: date) -> pd.DataFrame:
+        """
+        Get the 'Location Performance Summary by Lane' report to get total violations
+        :param start_date: First date to search, inclusive
+        :param end_date: Last date to search, inclusive
+        :return: Pandas data frame with the resulting data
+        """
+        parameters: ReportsDetailType = self.get_reports_detail("LOCATION PERFORMANCE SUMMARY BY LANE -- XML")
+        parameters['Parameters'][1]["ParmValue"] = start_date.strftime("%m/%d/%Y")
+        parameters['Parameters'][2]["ParmValue"] = end_date.strftime("%m/%d/%Y")
+        parameters['Parameters'][3]["ParmValue"] = "ALL"
+
+        response = self._get_report(parameters, Reports.LOCATION_SUMMARY)
+
+        columns = ['Location Code', 'Location Description', 'Lane', 'Vehicle Count', 'Event (Violation Count)',
+                   'Total Rejects (G+H+I+J+K+L)', 'Non Events', 'Controllable', 'Uncontrollable', 'PD Non Events',
+                   'PD Controllable', 'PD Uncontrollable', 'Events still in WF', 'Total Docs Issued (O+P+Q)',
+                   'Citations Issued', 'Nov Issued', 'Warning Issued', 'Last Violation Date']
+
+        return pd.read_csv(BytesIO(response.content), skiprows=[0, 1], names=columns)
 
     @retry(exceptions=requests.exceptions.ConnectionError,
            tries=10,

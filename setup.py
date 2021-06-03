@@ -17,9 +17,9 @@ setup(
         'pandas~=1.2.4',
         'beautifulsoup4~=4.9.3',
         'loguru~=0.5.3',
-        'sqlalchemy~=1.4.15',
+        'sqlalchemy~=1.4.17',
         'pyodbc~=4.0.30',
-        'urllib3~=1.26.4',
+        'urllib3~=1.26.5',
         'arcgis~=1.8.5.post3',
     ],
 )
