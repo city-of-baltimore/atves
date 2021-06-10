@@ -124,6 +124,14 @@ class Axsis:
         :param end_date: Last date to search, inclusive
         :return: Pandas data frame with the resulting data
         """
+        delta = (end_date - start_date).days
+        ret = []
+        if delta > 0:
+            for i in range(delta + 1):
+                cur_date = start_date + timedelta(days=i)
+                ret.append(self.get_location_summary_by_lane(cur_date, cur_date))
+            return pd.concat(ret)
+
         parameters: ReportsDetailType = self.get_reports_detail("LOCATION PERFORMANCE SUMMARY BY LANE -- XML")
         parameters['Parameters'][1]["ParmValue"] = start_date.strftime("%m/%d/%Y")
         parameters['Parameters'][2]["ParmValue"] = end_date.strftime("%m/%d/%Y")
@@ -131,12 +139,51 @@ class Axsis:
 
         response = self._get_report(parameters, Reports.LOCATION_SUMMARY)
 
-        columns = ['Location Code', 'Location Description', 'Lane', 'Vehicle Count', 'Event (Violation Count)',
-                   'Total Rejects (G+H+I+J+K+L)', 'Non Events', 'Controllable', 'Uncontrollable', 'PD Non Events',
-                   'PD Controllable', 'PD Uncontrollable', 'Events still in WF', 'Total Docs Issued (O+P+Q)',
-                   'Citations Issued', 'Nov Issued', 'Warning Issued', 'Last Violation Date']
+        dtypes = {'Location Code': 'str',
+                  'Location Description': 'str',
+                  'Lane': 'int',
+                  'Vehicle Count': 'int',
+                  'Event (Violation Count)': 'int',
+                  'Total Rejects (G+H+I+J+K+L)': 'int',
+                  'Non Events': 'int',
+                  'Controllable': 'int',
+                  'Uncontrollable': 'int',
+                  'PD Non Events': 'int',
+                  'PD Controllable': 'int',
+                  'PD Uncontrollable': 'int',
+                  'Events still in WF': 'int',
+                  'Total Docs Issued (O+P+Q)': 'int',
+                  'Citations Issued': 'int',
+                  'Nov Issued': 'int',
+                  'Warning Issued': 'int'
+                  }
 
-        return pd.read_csv(BytesIO(response.content), skiprows=[0, 1], names=columns)
+        columns = list(dtypes.keys()) + ['Last Violation Date']
+
+        dataframe = pd.read_csv(BytesIO(response.content), skiprows=[0, 1], names=columns, sep='\t', thousands=',',
+                                dtype=dtypes, parse_dates=['Last Violation Date'])
+
+        agg = {
+            'Date': 'first',
+            'Location Code': 'first',
+            'Location Description': 'first',
+            'Vehicle Count': 'sum',
+            'Event (Violation Count)': 'sum',
+            'Total Rejects (G+H+I+J+K+L)': 'sum',
+            'Non Events': 'sum',
+            'Controllable': 'sum',
+            'Uncontrollable': 'sum',
+            'PD Non Events': 'sum',
+            'PD Controllable': 'sum',
+            'PD Uncontrollable': 'sum',
+            'Events still in WF': 'sum',
+            'Total Docs Issued (O+P+Q)': 'sum',
+            'Citations Issued': 'sum',
+            'Nov Issued': 'sum',
+            'Warning Issued': 'sum'
+        }
+        dataframe['Date'] = start_date
+        return dataframe.groupby(dataframe['Location Code']).aggregate(agg)
 
     @retry(exceptions=requests.exceptions.ConnectionError,
            tries=10,

@@ -3,25 +3,24 @@ import argparse
 import math
 import re
 from datetime import date, datetime, timedelta
-from typing import Optional
 from sqlite3 import Connection as SQLite3Connection
+from typing import Optional
 
-from arcgis.gis import GIS  # type: ignore
 from arcgis.geocoding import geocode  # type: ignore
+from arcgis.gis import GIS  # type: ignore
 from loguru import logger
 from sqlalchemy import create_engine, event, inspect as sqlalchemyinspect  # type: ignore
+from sqlalchemy.engine import Engine  # type: ignore
 from sqlalchemy.exc import IntegrityError  # type: ignore
 from sqlalchemy.ext.declarative import DeclarativeMeta  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 from sqlalchemy.sql import text  # type: ignore
-from sqlalchemy.engine import Engine  # type: ignore
 
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesApprovalByReviewDateDetails, AtvesByLocation, \
-    AtvesCamLocations, AtvesTicketCameras, AtvesTrafficCounts, Base
+    AtvesCamLocations, AtvesTicketCameras, AtvesTrafficCounts, AtvesViolations, AtvesViolationCategories, Base
 from atves.axsis import Axsis
 from atves.conduent import Conduent, ALLCAMS, REDLIGHT, OVERHEIGHT
 from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDUENT_PASSWORD
-
 
 GIS()
 
@@ -32,6 +31,20 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):  # pylint:disable=u
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON;")
         cursor.close()
+
+
+VIOLATION_TYPES = {
+            # Conduent: 1- In Process || Axsis: Events still in WF
+            1: 'In Process',
+            # Conduent: 2- Conduent/City Non Violations || Axsis: Non Events, PD Non Event
+            2: 'Non Violations',
+            # Conduent: 3- Conduent/City Rejects(Controllable) || Axsis: Controllable, PD Controllable
+            3: 'Controllable Reject',
+            # Conduent: 4- Conduent/City Rejects(Uncontrollable) || Axsis: Uncontrollable, PD Uncontrollable
+            4: 'Uncontrollable Reject',
+            # Conduent: 5- Violations Mailed, || Axsis: Citations Issued, Nov Issued, Warning Issued
+            5: 'Violation Issued'
+        }
 
 
 class AtvesDatabase:
@@ -89,6 +102,11 @@ class AtvesDatabase:
             if diff:
                 raise AssertionError("Missing locations: {}".format(diff))
         self.location_db_built = True
+
+    def build_violation_lookup_db(self) -> None:
+        """Builds a violation description lookup table"""
+        for vio_key, vio_desc in VIOLATION_TYPES.items():
+            self._insert_or_update(AtvesViolationCategories(violation_cat=vio_key, description=vio_desc))
 
     def _build_db_conduent_red_light(self) -> None:
         """Builds the camera location database for red light cameras"""
@@ -395,6 +413,62 @@ class AtvesDatabase:
             self._insert_or_update(AtvesTrafficCounts(location_code=str(row['iLocationCode']).strip(),
                                                       date=datetime.strptime(row['Ddate'], '%m/%d/%Y').date(),
                                                       count=int(row['VehPass'])))
+
+    def process_violations(self, start_date: date, end_date: date) -> None:
+        """
+        Processes the traffic count camera data from Axsis and Conduent
+        :param start_date: Start date of the report to pull
+        :param end_date: End date of the report to pull
+        :return:
+        """
+        logger.info('Processing violation data from {} to {}', start_date.strftime("%m/%d/%y"),
+                    end_date.strftime("%m/%d/%y"))
+
+        self.build_location_db()
+        self.build_violation_lookup_db()
+        self._process_violations_axsis(start_date, end_date)
+        self._process_violations_conduent(start_date, end_date)
+
+    def _process_violations_axsis(self, start_date: date, end_date: date) -> None:
+        if not self.axsis_interface:
+            logger.warning('Unable to run _process_traffic_count_data_axsis. It requires a Axsis session, which is not '
+                           'setup.')
+            return
+
+        axsis_data = self.axsis_interface.get_location_summary_by_lane(start_date, end_date)
+        for _, row in axsis_data.iterrows():
+            for code, desc in ((1, 'Events still in WF'), (2, 'Non Events'), (2, 'PD Non Events'), (3, 'Controllable'),
+                               (3, 'PD Controllable'), (4, 'Uncontrollable'), (4, 'PD Uncontrollable'),
+                               (5, 'Citations Issued'), (5, 'Nov Issued'), (5, 'Warning Issued')):
+                self._insert_or_update(AtvesViolations(date=row['Date'],
+                                                       location_code=row['Location Code'],
+                                                       count=row[desc],
+                                                       violation_cat=code,
+                                                       details=desc)
+                                       )
+
+    def _process_violations_conduent(self, start_date: date, end_date: date) -> None:
+        violation_lookup = {
+            '1- In Process': 1,
+            '2- Conduent/City Non Violations': 2,
+            '3- Conduent/City Rejects(Controllable)': 3,
+            '4- Conduent/City Rejects(Uncontrollable)': 4,
+            '5- Violations Mailed': 5
+        }
+
+        if not self.conduent_interface:
+            logger.warning('Unable to run _process_traffic_count_data_conduent. It requires a Conduent '
+                           'session, which is not setup.')
+            return
+
+        conduent_data = self.conduent_interface.get_client_summary_by_location(start_date, end_date)
+        for _, row in conduent_data.iterrows():
+            self._insert_or_update(AtvesViolations(date=datetime.strptime(row['Date'], '%m/%d/%y'),
+                                                   location_code=row['Locations'],
+                                                   count=row['DetailCount'],
+                                                   violation_cat=violation_lookup[row['iOrderBy']],
+                                                   details=row['vcDescription'])
+                                   )
 
     def _insert_or_update(self, insert_obj: DeclarativeMeta, identity_insert=False) -> None:
         """

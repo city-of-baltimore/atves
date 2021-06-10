@@ -247,6 +247,10 @@ def test_get_client_summary_by_location(conduent_fixture):
                                                           'NOTALOCATION')
     assert ret is None
 
+    # all cams
+    ret = conduent_fixture.get_client_summary_by_location(start_date, end_date, atves.conduent.ALLCAMS)
+    assert len(ret) > 10
+
     # invalid cam type
     with pytest.raises(AssertionError):
         conduent_fixture.get_client_summary_by_location(start_date, end_date, 30)

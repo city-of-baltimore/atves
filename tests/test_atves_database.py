@@ -6,7 +6,7 @@ from sqlalchemy import create_engine  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesApprovalByReviewDateDetails, AtvesByLocation, \
-    AtvesCamLocations, AtvesTicketCameras, AtvesTrafficCounts
+    AtvesCamLocations, AtvesTicketCameras, AtvesTrafficCounts, AtvesViolationCategories, AtvesViolations
 from atves.conduent import REDLIGHT, OVERHEIGHT
 
 
@@ -189,3 +189,19 @@ def test_atvesdb_process_traffic_count_data(atvesdb_fixture, atvesdb_fixture_no_
         atvesdb_fixture.process_traffic_count_data(start_date=date(2020, 11, 1), end_date=date(2020, 11, 3))
         ret = session.query(AtvesTrafficCounts)
         assert ret.count() > 100
+
+
+def test_process_violations(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
+    """Testing process_violations"""
+    engine = create_engine(conn_str, echo=True, future=True)
+    with Session(bind=engine, future=True) as session:
+        atvesdb_fixture_no_creds.process_violations(start_date=date(2021, 6, 1), end_date=date(2021, 6, 3))
+        ret = session.query(AtvesViolations)
+        assert ret.count() == 0
+
+        atvesdb_fixture.process_violations(start_date=date(2021, 6, 1), end_date=date(2021, 6, 3))
+        ret = session.query(AtvesViolationCategories)
+        assert ret.count() == 5
+
+        ret = session.query(AtvesViolations)
+        assert ret.count() > 1500

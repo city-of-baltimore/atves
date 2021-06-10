@@ -15,10 +15,10 @@ def test_axsis_get_traffic_counts(axsis_fixture):
 def test_get_location_summary_by_lane(axsis_fixture):
     """Test get_location_summary_by_lane"""
     start_date = date(2021, 5, 3)
-    end_date = date(2021, 5, 3)
+    end_date = date(2021, 5, 4)
     ret = axsis_fixture.get_location_summary_by_lane(start_date, end_date)
-    assert len(ret.columns) == 18
-    assert len(ret) == 199
+    assert len(ret.columns) == 17
+    assert len(ret) == 235
 
 
 def test_axsis_get_client_id(axsis_fixture):

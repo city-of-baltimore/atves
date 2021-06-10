@@ -51,6 +51,27 @@ class AtvesCamLocations(Base):
     AtvesByLocation = relationship('AtvesByLocation')
 
 
+class AtvesViolations(Base):
+    """Violation counts"""
+    __tablename__ = "atves_violations"
+
+    date = Column(Date)
+    location_code = Column(String(length=100), primary_key=True)
+    count = Column(Integer)
+    violation_cat = Column(Integer, ForeignKey('atves_violation_categories.violation_cat'), primary_key=True)
+    details = Column(String(length=100), primary_key=True)
+
+
+class AtvesViolationCategories(Base):
+    """Lookup table for the violation_cat column in AtvesViolations"""
+    __tablename__ = "atves_violation_categories"
+
+    violation_cat = Column(Integer, primary_key=True)
+    description = Column(String(length=100))
+
+    AtvesViolations = relationship('AtvesViolations')
+
+
 class AtvesAmberTimeRejects(Base):
     """get_amber_time_rejects_report (red light only)"""
     __tablename__ = "atves_amber_time_rejects"

@@ -309,18 +309,23 @@ class Conduent:
                                scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
                                               'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
 
-    def get_client_summary_by_location(self, start_date: date, end_date: date, cam_type: int,
+    def get_client_summary_by_location(self, start_date: date, end_date: date, cam_type: int = ALLCAMS,
                                        location='999,All Locations') -> pd.core.frame.DataFrame:
         """
         Downloads the client summary by location
-        :param cam_type: Camera type to query. Either conduent.OVERHEIGHT or conduent.REDLIGHT
+        :param cam_type: Camera type to query. Either conduent.OVERHEIGHT, conduent.REDLIGHT, or conduent.ALLCAMS
         :param start_date: Start date of the report to pull
         :param end_date: End date of the report to pull
         :param location: Optional location search. Uses the codes from the website
         :return: pandas.core.frame.DataFrame
         """
-        if cam_type not in [REDLIGHT, OVERHEIGHT]:
+        if cam_type not in [REDLIGHT, OVERHEIGHT, ALLCAMS]:
             raise AssertionError("Cam type {} is unexpected".format(cam_type))
+
+        if cam_type == ALLCAMS:
+            rep_rl = self.get_client_summary_by_location(start_date, end_date, cam_type=REDLIGHT)
+            rep_oh = self.get_client_summary_by_location(start_date, end_date, cam_type=OVERHEIGHT)
+            return pd.concat([rep_rl, rep_oh])
 
         if cam_type == REDLIGHT:
             report = '5608,302,Client Summary By Location,1,false,true'
