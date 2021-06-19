@@ -3,13 +3,13 @@ import calendar
 import re
 import urllib
 from datetime import date, datetime, timedelta
-from typing import Generator, List, Tuple
+from typing import Generator, List, Optional, Tuple
 
 import pandas as pd  # type: ignore
 import requests
 from bs4 import BeautifulSoup  # type: ignore
 from loguru import logger
-from retry import retry
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 
 from atves.conduent_types import CameraType, ConduentResultsType, SessionStateType
 
@@ -34,14 +34,13 @@ class Conduent:
                                               '__VIEWSTATEGENERATOR': None,
                                               '__EVENTVALIDATION': None
                                               }
-        self.deployment_server = None
-        self.session_id = None
+        self.deployment_server: Optional[str] = None
+        self.session_id: Optional[str] = None
 
         self._login(username, password)
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def _login(self, username, password) -> None:
         """ First step of sending username and password """
         payload = {
@@ -62,9 +61,8 @@ class Conduent:
         if len(soup.find_all('input', {'name': 'txtOTP'})) != 1:
             raise AssertionError("Login failure with Conduent")
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def login_otp(self, otp: str) -> None:
         """
         Logs in with the required one time password. This seems to not be required, but is left in incase they ever fix
@@ -121,9 +119,8 @@ class Conduent:
         self._state_vals['__VIEWSTATEGENERATOR'] = tags['__VIEWSTATEGENERATOR']
         self._state_vals['__EVENTVALIDATION'] = tags['__EVENTVALIDATION']
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def get_location_by_id(self, loc_id: int, cam_type: int) -> CameraType:
         """
         Gets camera information by location id. The id is <ID> in
@@ -190,9 +187,8 @@ class Conduent:
                 'status': results.group(8),
                 'cam_type': cam_type_str}
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def get_overheight_cameras(self) -> List[Tuple[int, str]]:
         """
         Get the list of overheight cameras
@@ -470,9 +466,8 @@ class Conduent:
             report = '5579,307,Pending Client Approval,1,false,true'
         return self.get_report(report, OVERHEIGHT)
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def get_report(self, report_type, cam_type, input_params=None, scrape_params=None) -> pd.core.frame.DataFrame:
         """
         Pulls the specified report
@@ -572,9 +567,8 @@ class Conduent:
             if self.deployment_server is not None:
                 break
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def _setup_report_request(self, cam_type: int) -> None:
         """
         This is mainly about requesting pages in the right order, to simulate someone using a browser
@@ -604,9 +598,8 @@ class Conduent:
         self.session.cookies.set('DB', None)
         self.session.cookies.set('DB', cookie_val)
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def _get_deployment_data(self, search_start_date: date, search_end_date: date,
                              cam_type) -> List[ConduentResultsType]:
         """ Pull the data from the deployment section"""

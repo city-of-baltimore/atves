@@ -10,7 +10,7 @@ import requests
 import xlrd  # type: ignore
 from bs4 import BeautifulSoup  # type: ignore
 from loguru import logger
-from retry import retry
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 from urllib3 import util  # type: ignore
 
 from atves.axsis_types import ReportsDetailType
@@ -92,9 +92,9 @@ class Axsis:
         return self.session.get('https://webportal1.atsol.com/Axsis.Web/Report/ReportFile',
                                 headers=headers, params=params)
 
-    @retry(exceptions=(requests.exceptions.ConnectionError, xlrd.biffh.XLRDError),
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=(retry_if_exception_type(requests.exceptions.ConnectionError) |
+                  retry_if_exception_type(xlrd.biffh.XLRDError)))
     @log_and_validate_params
     def get_traffic_counts(self, start_date: date, end_date: date) -> pd.DataFrame:
         """
@@ -103,7 +103,11 @@ class Axsis:
         :param end_date: Last date to search, inclusive
         :return: Pandas data frame with the resulting data
         """
-        parameters: ReportsDetailType = self.get_reports_detail("SITE ACTIVITY BY TRAFFIC EVENTS")
+        parameters: Optional[ReportsDetailType] = self.get_reports_detail("SITE ACTIVITY BY TRAFFIC EVENTS")
+        if not parameters:
+            logger.error('Unable to get traffic counts')
+            return pd.DataFrame()
+
         parameters['Parameters'][1]["ParmValue"] = start_date.strftime("%m/%d/%Y")
         parameters['Parameters'][2]["ParmValue"] = end_date.strftime("%m/%d/%Y")
 
@@ -114,9 +118,9 @@ class Axsis:
                    for x in range((end_date - start_date).days + 1)]
         return pd.read_excel(response.content, skiprows=[0, 1], names=columns)
 
-    @retry(exceptions=(requests.exceptions.ConnectionError, xlrd.biffh.XLRDError),
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=(retry_if_exception_type(requests.exceptions.ConnectionError) |
+                  retry_if_exception_type(xlrd.biffh.XLRDError)))
     def get_location_summary_by_lane(self, start_date: date, end_date: date) -> pd.DataFrame:
         """
         Get the 'Location Performance Summary by Lane' report to get total violations
@@ -132,7 +136,11 @@ class Axsis:
                 ret.append(self.get_location_summary_by_lane(cur_date, cur_date))
             return pd.concat(ret)
 
-        parameters: ReportsDetailType = self.get_reports_detail("LOCATION PERFORMANCE SUMMARY BY LANE -- XML")
+        parameters: Optional[ReportsDetailType] = self.get_reports_detail("LOCATION PERFORMANCE SUMMARY BY LANE -- XML")
+        if not parameters:
+            logger.error("Unable to get location summary by lane")
+            return pd.DataFrame()
+
         parameters['Parameters'][1]["ParmValue"] = start_date.strftime("%m/%d/%Y")
         parameters['Parameters'][2]["ParmValue"] = end_date.strftime("%m/%d/%Y")
         parameters['Parameters'][3]["ParmValue"] = "ALL"
@@ -185,9 +193,8 @@ class Axsis:
         dataframe['Date'] = start_date
         return dataframe.groupby(dataframe['Location Code']).aggregate(agg)
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def _login(self) -> None:
         """
         Logs into the Axsis system, which is required to do anything with the API
@@ -250,9 +257,8 @@ class Axsis:
                 raise AssertionError("Cookie {} not in list of valid cookie: {}".format(
                     cookie_name, list_of_cookies.keys()))
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def _get_client_id(self) -> None:
         """
         Gets the client id and client code associated with self.username and assigns them to those attributes
@@ -271,9 +277,8 @@ class Axsis:
         self.client_id = soup.find_all('input', id='clientId')[0]['value']
         self.client_code = soup.find_all('input', id='clientCode')[0]['value']
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def _get_reports(self, name: str) -> Optional[int]:
         """
         Take the response to GetReports and get the required report number
@@ -304,9 +309,8 @@ class Axsis:
 
         return None
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def get_reports_detail(self, report_name: str) -> Optional[ReportsDetailType]:
         """
         Gets the ReportsDetailType structure of the report details from AXSIS.
@@ -344,10 +348,14 @@ class Axsis:
         Gets the location information (address) of a camera based on its ID
         :param location_id: the location identifier of the camera (IE BAL101)
         """
-        report = self.get_reports_detail('LOCATION PERFORMANCE DETAIL')
-        for param_data in report.get('Parameters'):
-            if param_data.get('ParmDataType') == 'PICKLIST':
-                for param_list in param_data.get('ParmList'):
+        report: Optional[ReportsDetailType] = self.get_reports_detail('LOCATION PERFORMANCE DETAIL')
+        if report is None or report['Parameters'] is None:
+            logger.error('Unable to get location info')
+            return None
+
+        for param_data in report['Parameters']:
+            if param_data.get('ParmDataType') == 'PICKLIST' and param_data['ParmList'] is not None:
+                for param_list in param_data['ParmList']:
                     if param_list.get('Value') == location_id:
                         return param_list.get('Description').split(' - ')[1]
         return None

@@ -12,10 +12,12 @@ from atves.atves_schema import AtvesTrafficCounts, Base
 
 def pytest_addoption(parser):
     """Pytest custom arguments"""
-    parser.addoption('--axsis-user', action='store', required=True)
-    parser.addoption('--axsis-pass', action='store', required=True)
-    parser.addoption('--conduent-user', action='store', required=True)
-    parser.addoption('--conduent-pass', action='store', required=True)
+    parser.addoption('--axsis-user', action='store')
+    parser.addoption('--axsis-pass', action='store')
+    parser.addoption('--conduent-user', action='store')
+    parser.addoption('--conduent-pass', action='store')
+    parser.addoption('--report-user', action='store')
+    parser.addoption('--report-pass', action='store')
 
 
 @pytest.fixture(name='conduent_fixture')
@@ -28,6 +30,12 @@ def fixture_conduent(conduent_username, conduent_password):
 def fixture_axsis(axsis_username, axsis_password):
     """Axsis object"""
     return atves.axsis.Axsis(axsis_username, axsis_password)
+
+
+@pytest.fixture(name='cobreport_fixture')
+def fixture_cobreport(report_username, report_password):
+    """CobReport object"""
+    return atves.financial.CobReports(report_username, report_password)
 
 
 @pytest.fixture(name='atvesdb_fixture')

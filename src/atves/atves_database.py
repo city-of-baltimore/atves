@@ -128,14 +128,18 @@ class AtvesDatabase:
 
             try:
                 lat, lng = self.get_lat_long(ret['location'])
+                edate = None
+                if ret['effective_date'] is not None:
+                    edate = datetime.strptime(ret['effective_date'], '%b %d, %Y')
+                speed_limit = int(ret['speed_limit']) if ret['speed_limit'] is not None else 0
                 self._insert_or_update(AtvesCamLocations(
                     location_code=str(ret['site_code']),
                     locationdescription=str(ret['location']),
                     lat=lat,
                     long=lng,
                     cam_type=str(ret['cam_type']),
-                    effective_date=datetime.strptime(ret['effective_date'], '%b %d, %Y'),
-                    speed_limit=int(ret['speed_limit']),
+                    effective_date=edate,
+                    speed_limit=speed_limit,
                     status=bool(ret['status'] == 'Active')))
             except RuntimeError as err:
                 logger.warning("Geocoder error: {}", err)
@@ -160,18 +164,22 @@ class AtvesDatabase:
                                                      speed_limit=None,
                                                      status=None))
 
-    def _build_db_speed_cameras(self) -> None:
+    def _build_db_speed_cameras(self) -> bool:
         """Builds the camera location database for speed cameras"""
         if not self.axsis_interface:
             logger.warning('Unable to run _build_db_speed_cameras. It requires a Axsis session, which is not setup.')
-            return
+            return False
 
         # Get the list of location codes in the traffic count database (AXSIS)
         with Session(bind=self.engine, future=True) as session:
             # get all cameras used in the last 30 days
             report_details = self.axsis_interface.get_reports_detail('LOCATION PERFORMANCE DETAIL')
-            active_cams = [param_elem['Value'] for param in report_details['Parameters']
-                           if param['ParmTitle'] == 'Violation Locations'
+            if report_details is None or report_details.get('Parameters') is None:
+                logger.error('Unable to get speed camera information')
+                return False
+
+            active_cams = [param_elem.get('Value') for param in report_details['Parameters']
+                           if param['ParmTitle'] == 'Violation Locations' and param['ParmList'] is not None
                            for param_elem in param['ParmList']]
 
             for location_code in active_cams:
@@ -202,6 +210,8 @@ class AtvesDatabase:
                                                          effective_date=cam_date,
                                                          speed_limit=None,
                                                          status=None))
+
+        return True
 
     def process_conduent_reject_numbers(self, start_date: date, end_date: date, cam_type=ALLCAMS) -> None:
         """
