@@ -118,6 +118,28 @@ class AtvesByLocation(Base):
     order_by = Column(Integer)
 
 
+class AtvesFinancial(Base):
+    """General ledger detail reports"""
+    __tablename__ = 'atves_finacial'
+
+    journal_entry_no = Column(Integer, primary_key=True)
+    ledger_posting_date = Column(Date, nullable=False)
+    account_no = Column(String(length=50))
+    legacy_account_no = Column(String(length=50))
+    amount = Column(Numeric(precision=12, scale=2))
+    source_journal = Column(String(length=50))
+    trx_reference = Column(String(length=50))
+    TrxDescription = Column(String(length=255))
+    user_who_posted = Column(String(length=50))
+    trx_no = Column(String(length=50))
+    vendorid_or_customerid = Column(String(length=50))
+    vendor_or_customer_name = Column(String(length=100))
+    document_no = Column(String(length=50))
+    Trx_source = Column(String(length=50))
+    account_description = Column(String(length=255))
+    account_type = Column(String(length=50))
+    agency_or_category = Column(String(length=50))
+
 # Reports not yet being imported
 # get_approval_summary_by_queue
 # get_expired_by_location

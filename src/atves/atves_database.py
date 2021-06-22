@@ -17,19 +17,22 @@ from sqlalchemy.orm import Session  # type: ignore
 from sqlalchemy.sql import text  # type: ignore
 
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesApprovalByReviewDateDetails, AtvesByLocation, \
-    AtvesCamLocations, AtvesTicketCameras, AtvesTrafficCounts, AtvesViolations, AtvesViolationCategories, Base
+    AtvesCamLocations, AtvesFinancial, AtvesTicketCameras, AtvesTrafficCounts, AtvesViolations, \
+    AtvesViolationCategories, Base
 from atves.axsis import Axsis
 from atves.conduent import Conduent, ALLCAMS, REDLIGHT, OVERHEIGHT
-from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDUENT_PASSWORD
+from atves.financial import CobReports
+from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDUENT_PASSWORD, REPORT_USERNAME, \
+    REPORT_PASSWORD
 
 GIS()
 
 
-@event.listens_for(Engine, "connect")
+@event.listens_for(Engine, 'connect')
 def _set_sqlite_pragma(dbapi_connection, connection_record):  # pylint:disable=unused-argument
     if isinstance(dbapi_connection, SQLite3Connection):
         cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON;")
+        cursor.execute('PRAGMA foreign_keys=ON;')
         cursor.close()
 
 
@@ -52,10 +55,17 @@ class AtvesDatabase:
 
     def __init__(self, conn_str: str, axsis_user: Optional[str] = AXSIS_USERNAME,  # pylint:disable=too-many-arguments
                  axsis_pass: Optional[str] = AXSIS_PASSWORD, conduent_user: Optional[str] = CONDUENT_USERNAME,
-                 conduent_pass: Optional[str] = CONDUENT_PASSWORD):
+                 conduent_pass: Optional[str] = CONDUENT_PASSWORD, report_user: Optional[str] = REPORT_USERNAME,
+                 report_pass: Optional[str] = REPORT_PASSWORD):
         """
         :param conn_str: sqlalchemy connection string (IE sqlite:///crash.db or
         Driver={SQL Server};Server=balt-sql311-prd;Database=DOT_DATA;Trusted_Connection=yes;)
+        :param axsis_user: username for https://webportal1.atsol.com/axsis.web/Account/Login
+        :param axsis_pass: password for https://webportal1.atsol.com/axsis.web/Account/Login
+        :param conduent_user: username for https://cw3.cite-web.com/loginhub/Main.aspx
+        :param conduent_pass: password for https://cw3.cite-web.com/loginhub/Main.aspx
+        :param report_user: username for https://cobrpt02.rsm.cloud/ReportServer
+        :param report_pass: password for https://cobrpt02.rsm.cloud/ReportServer
         """
         logger.info('Creating db with connection string: {}', conn_str)
         self.engine = create_engine(conn_str, echo=True, future=True)
@@ -65,6 +75,7 @@ class AtvesDatabase:
 
         self.axsis_interface = Axsis(username=axsis_user, password=axsis_pass) if axsis_user and axsis_pass else None
         self.conduent_interface = Conduent(conduent_user, conduent_pass) if conduent_user and conduent_pass else None
+        self.financial_interface = CobReports(report_user, report_pass) if report_user and report_pass else None
 
         self.location_db_built = False
 
@@ -92,7 +103,7 @@ class AtvesDatabase:
 
             diff = set(location_codes) - set(existing_location_codes)
             if diff:
-                raise AssertionError("Missing location codes: {}".format(diff))
+                raise AssertionError('Missing location codes: {}'.format(diff))
 
             # look for missing locations
             locations = session.query(AtvesTicketCameras.location).all()
@@ -100,7 +111,7 @@ class AtvesDatabase:
             diff = set(locations) - set(existing_locations)
 
             if diff:
-                raise AssertionError("Missing locations: {}".format(diff))
+                raise AssertionError('Missing locations: {}'.format(diff))
         self.location_db_built = True
 
     def build_violation_lookup_db(self) -> None:
@@ -142,7 +153,7 @@ class AtvesDatabase:
                     speed_limit=speed_limit,
                     status=bool(ret['status'] == 'Active')))
             except RuntimeError as err:
-                logger.warning("Geocoder error: {}", err)
+                logger.warning('Geocoder error: {}', err)
 
     def _build_db_conduent_overheight(self) -> None:
         """Builds the camera location database for over height cameras"""
@@ -191,7 +202,7 @@ class AtvesDatabase:
                     filter(AtvesTrafficCounts.location_code == location_code).all()
 
                 try:
-                    cam_date: Optional[datetime] = datetime.strptime(traffic_counts[0][1], "%Y-%m-%d")
+                    cam_date: Optional[datetime] = datetime.strptime(traffic_counts[0][1], '%Y-%m-%d')
                     axsis_data = self.axsis_interface.get_traffic_counts(cam_date, cam_date)
                     location = [x for x in axsis_data.values.tolist() if x[0] == location_code][0][1]
                 except IndexError:
@@ -222,8 +233,8 @@ class AtvesDatabase:
             or conduent.ALLCAMS (default: conduent.ALLCAMS)
         :return: None
         """
-        logger.info('Processing conduent reject reports from {} to {}', start_date.strftime("%m/%d/%y"),
-                    end_date.strftime("%m/%d/%y"))
+        logger.info('Processing conduent reject reports from {} to {}', start_date.strftime('%m/%d/%y'),
+                    end_date.strftime('%m/%d/%y'))
 
         if not self.conduent_interface:
             logger.warning('Unable to run process_conduent_reject_numbers. It requires a Conduent session, which is not'
@@ -253,8 +264,8 @@ class AtvesDatabase:
         :param end_date: End date of the report to pull
         :return:
         """
-        logger.info('Processing conduent amber time report from {} to {}', start_date.strftime("%m/%d/%y"),
-                    end_date.strftime("%m/%d/%y"))
+        logger.info('Processing conduent amber time report from {} to {}', start_date.strftime('%m/%d/%y'),
+                    end_date.strftime('%m/%d/%y'))
 
         if not self.conduent_interface:
             logger.warning('Unable to run process_conduent_data_amber_time. It requires a Conduent session, which is '
@@ -284,8 +295,8 @@ class AtvesDatabase:
         :param cam_type: Either conduent.REDLIGHT or conduent.OVERHEIGHT
         :return:
         """
-        logger.info('Processing conduent data approval report from {} to {}', start_date.strftime("%m/%d/%y"),
-                    end_date.strftime("%m/%d/%y"))
+        logger.info('Processing conduent data approval report from {} to {}', start_date.strftime('%m/%d/%y'),
+                    end_date.strftime('%m/%d/%y'))
 
         if not self.conduent_interface:
             logger.warning('Unable to run process_conduent_data_approval_by_review_date. It requires a Conduent '
@@ -306,7 +317,7 @@ class AtvesDatabase:
                 citation_no=str(row['CitNum']),
                 violation_date=datetime.strptime(row['Vio Date'], '%b %d %Y %I:%M%p'),
                 review_status=str(row['Review Status']),
-                review_datetime=datetime.strptime("{} {}".format(row['Review Date'], row['st']), '%m/%d/%Y %H:%M:%S')))
+                review_datetime=datetime.strptime('{} {}'.format(row['Review Date'], row['st']), '%m/%d/%Y %H:%M:%S')))
 
     def process_conduent_data_by_location(self, start_date: date, end_date: date, cam_type: int = ALLCAMS) -> None:
         """
@@ -330,19 +341,19 @@ class AtvesDatabase:
 
         def _get_int(value):
             """Gets int on the front of the string"""
-            pattern = re.compile(r"(\d*)")
+            pattern = re.compile(r'(\d*)')
             ret = 0
             if value != 'All Locations':
                 match = pattern.match(value)
                 if match.lastindex < 1:
-                    logger.error("Unable to parse location {}", value)
+                    logger.error('Unable to parse location {}', value)
                     ret = 9999
                 else:
                     ret = match.group(1)
             return int(ret)
 
-        logger.info('Processing conduent location data reports from {} to {}', start_date.strftime("%m/%d/%y"),
-                    end_date.strftime("%m/%d/%y"))
+        logger.info('Processing conduent location data reports from {} to {}', start_date.strftime('%m/%d/%y'),
+                    end_date.strftime('%m/%d/%y'))
         data = self.conduent_interface.get_client_summary_by_location(start_date, end_date, cam_type)
 
         if data.empty:
@@ -375,8 +386,8 @@ class AtvesDatabase:
         :param end_date: End date of the report to pull
         :return:
         """
-        logger.info('Processing traffic count data from {} to {}', start_date.strftime("%m/%d/%y"),
-                    end_date.strftime("%m/%d/%y"))
+        logger.info('Processing traffic count data from {} to {}', start_date.strftime('%m/%d/%y'),
+                    end_date.strftime('%m/%d/%y'))
 
         self.build_location_db()
         self._process_traffic_count_data_axsis(start_date, end_date)
@@ -431,8 +442,8 @@ class AtvesDatabase:
         :param end_date: End date of the report to pull
         :return:
         """
-        logger.info('Processing violation data from {} to {}', start_date.strftime("%m/%d/%y"),
-                    end_date.strftime("%m/%d/%y"))
+        logger.info('Processing violation data from {} to {}', start_date.strftime('%m/%d/%y'),
+                    end_date.strftime('%m/%d/%y'))
 
         self.build_location_db()
         self.build_violation_lookup_db()
@@ -479,6 +490,73 @@ class AtvesDatabase:
                                                    violation_cat=violation_lookup[row['iOrderBy']],
                                                    details=row['vcDescription'])
                                    )
+
+    def process_overheight_financials(self, start_date: date, end_date: date):
+        """
+        Get the data related to the overheight automated enforcement program and put it in the database
+        Accounts: 1001-000000-2030-794100-403752 Commercial Truck Enforcement
+        :param start_date: First date (inclusive) to process
+        :param end_date: Last date (inclusive) to process
+        """
+        self._insert_financials_by_account('10010000002030794100403752', start_date, end_date)
+
+    def process_redlight_financials(self, start_date: date, end_date: date):
+        """
+        Get the data related to the redlight automated enforcement program and put it in the database
+        Accounts:
+            A001-191-203-00-0-00 Red Light Fines
+            A001-192-203-00-0-00 Right Turn on Red Fines
+            1001-697-006-00-3-51 General-n/a-Traffic Safety-Traffic Cameras-Payments/sub-Contractors:
+                CONDUENT STATE & LOCAL SOLUTIONS, INC. (probably red light and overheight)
+            1001-697-006-00-3-25 General-n/a-Traffic Safety-Traffic Cameras-Rental Of Operating Equipment
+                (probably red light and overheight)
+        :param start_date: First date (inclusive) to process
+        :param end_date: Last date (inclusive) to process
+        """
+        for acct in ['A00119120300000', 'A00119220300000', '100169700600351', '100169700600325']:
+            self._insert_financials_by_account(acct, start_date, end_date)
+
+    def process_speed_financials(self, start_date: date, end_date: date):
+        """
+        Get the data related to the overheight automated enforcement program and put it in the database
+        Accounts:
+            A001-193-203-00-0-00 General-n/a-Traffic-Speed Cameras-Speed Cameras
+            1001-697-006-00-3-51 General-n/a-Traffic Safety-Traffic Cameras-Payments/sub-Contractors:
+                American Traffic Solutions, Inc.
+            1001-697-013-00-3-25 General-n/a-Traffic Safety-Speed Camera Violations-Rental Of Operating
+                Equipment
+        :param start_date: First date (inclusive) to process
+        :param end_date: Last date (inclusive) to process
+        """
+        for acct in ['A00119320300000', '100169700600351', '100169701300325']:
+            self._insert_financials_by_account(acct, start_date, end_date)
+
+    def _insert_financials_by_account(self, account, start_date, end_date):
+        if not self.conduent_interface:
+            logger.warning('Unable to insert financial data. It requires a reports session, which is not setup.')
+            return
+
+        df = self.financial_interface.get_general_ledger_detail(start_date, end_date, account, '55')
+        for index, row in df.iterrows():
+            self._insert_or_update(AtvesFinancial(
+                journal_entry_no=row['JournalEntryNo'],
+                ledger_posting_date=row['LedgerPostingDate'],
+                account_no=row['AccountNo'],
+                legacy_account_no=row['LegacyAccountNo'],
+                amount=row['Amount'],
+                source_journal=row['SourceJournal'],
+                trx_reference=row['TrxReference'],
+                TrxDescription=row['TrxDescription'],
+                user_who_posted=row['UserWhoPosted'],
+                trx_no=row['TrxNo'],
+                vendorid_or_customerid=row['VendorIDOrCustomerID'],
+                vendor_or_customer_name=row['VendorOrCustomerName'],
+                document_no=row['DocumentNo'],
+                Trx_source=row['TrxSource'],
+                account_description=row['AccountDescription'],
+                account_type=row['AccountType'],
+                agency_or_category=row['AgencyOrCategory']
+            ))
 
     def _insert_or_update(self, insert_obj: DeclarativeMeta, identity_insert=False) -> None:
         """
@@ -542,7 +620,7 @@ class AtvesDatabase:
         :param address: Street address to search. The more complete the address, the better.
         """
         address = self._standardize_address(address)
-        geo_dict = geocode("{}, Baltimore, MD".format(address))
+        geo_dict = geocode('{}, Baltimore, MD'.format(address))
         lat = None
         lng = None
         if geo_dict and geo_dict[0]['score'] > 90:
@@ -586,12 +664,13 @@ if __name__ == '__main__':
                               'yesterday if not specified'))
     parser.add_argument('-n', '--numofdays', default=30, type=int,
                         help='Optional: Number of days to search, including the start date.')
-    parser.add_argument('-a', '--allcams', action='store_true', help="Process all camera types")
-    parser.add_argument('-o', '--oh', action='store_true', help="Process only over height cameras")
-    parser.add_argument('-r', '--rl', action='store_true', help="Process only red light cameras")
-    parser.add_argument('-t', '--tc', action='store_true', help="Process only traffic counts")
+    parser.add_argument('-a', '--allcams', action='store_true', help='Process all camera types')
+    parser.add_argument('-o', '--oh', action='store_true', help='Process over height cameras')
+    parser.add_argument('-r', '--rl', action='store_true', help='Process red light cameras')
+    parser.add_argument('-t', '--tc', action='store_true', help='Process traffic counts')
+    parser.add_argument('-s', '--sc', action='store_true', help='Process speed cameras')
     parser.add_argument('-b', '--builddb', action='store_true',
-                        help="Rebuilds (or updates) the camera location database")
+                        help='Rebuilds (or updates) the camera location database')
 
     args = parser.parse_args()
     ad = AtvesDatabase(conn_str='mssql+pyodbc://balt-sql311-prd/DOT_DATA?driver=ODBC Driver 17 for SQL Server',
@@ -601,7 +680,7 @@ if __name__ == '__main__':
     _start_date = date(args.year, args.month, args.day)
     _end_date = (date(args.year, args.month, args.day) + timedelta(days=args.numofdays - 1))
 
-    all_cams = bool(args.allcams or not any([args.oh, args.rl, args.tc]))
+    all_cams = bool(args.allcams or not any([args.oh, args.rl, args.tc, args.sc]))
 
     # Process traffic cameras
     if args.tc or all_cams:
@@ -612,6 +691,7 @@ if __name__ == '__main__':
         ad.process_conduent_reject_numbers(_start_date, _end_date, OVERHEIGHT)
         ad.process_conduent_data_by_location(_start_date, _end_date, OVERHEIGHT)
         ad.process_conduent_data_approval_by_review_date(_start_date, _end_date, OVERHEIGHT)
+        ad.process_overheight_financials(_start_date, _end_date)
 
     # Process red light cameras
     if args.rl or all_cams:
@@ -619,3 +699,8 @@ if __name__ == '__main__':
         ad.process_conduent_data_by_location(_start_date, _end_date, REDLIGHT)
         ad.process_conduent_data_amber_time(_start_date, _end_date)
         ad.process_conduent_data_approval_by_review_date(_start_date, _end_date, REDLIGHT)
+        ad.process_redlight_financials(_start_date, _end_date)
+
+    # Process speed cameras
+    if args.sc or all_cams:
+        ad.process_speed_financials(_start_date, _end_date)

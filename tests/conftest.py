@@ -49,7 +49,7 @@ def fixture_atvesdb(conn_str, axsis_username, axsis_password,  # pylint:disable=
 @pytest.fixture(name='atvesdb_fixture_no_creds')
 def fixture_atvesdb_no_credss(conn_str):
     """ATVES Database object"""
-    return atves.atves_database.AtvesDatabase(conn_str, None, None, None, None)
+    return atves.atves_database.AtvesDatabase(conn_str, None, None, None, None, None, None)
 
 
 @pytest.fixture(name='conn_str')
@@ -97,3 +97,15 @@ def fixture_conduent_username(request):
 def fixture_conduent_password(request):
     """The password to login to Conduent"""
     return request.config.getoption('--conduent-pass')
+
+
+@pytest.fixture(name='report_username')
+def fixture_report_username(request):
+    """The username to login to the financial report server"""
+    return request.config.getoption('--report-user')
+
+
+@pytest.fixture(name='report_password')
+def fixture_report_password(request):
+    """The username to login to the financial report server"""
+    return request.config.getoption('--report-pass')

@@ -26,10 +26,13 @@ class CobReports:
         passman.add_password(None, 'https://cobrpt02.rsm.cloud', username, password)
         self.browser.add_handler(HTTPNtlmAuthHandler.HTTPNtlmAuthHandler(passman))
 
+        if self.browser.open('{}/Reports'.format(baseurl)).code != 200:
+            raise AssertionError('Invalid username/password')
+
         self.baseurl = baseurl
 
     def get_general_ledger_detail(self, start_date: date, end_date: date,  # pylint:disable=too-many-locals
-                                  legacy_account_no: str, agency: str) -> pd.DataFrame:
+                                  legacy_account_no: str, agency: str = '0') -> pd.DataFrame:
         """
         Pulls the COB Reports > Monthly Financials and Support > General Ledger Detail report. This holds most of the
         transaction level data for the city

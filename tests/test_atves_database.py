@@ -6,7 +6,7 @@ from sqlalchemy import create_engine  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesApprovalByReviewDateDetails, AtvesByLocation, \
-    AtvesCamLocations, AtvesTicketCameras, AtvesTrafficCounts, AtvesViolationCategories, AtvesViolations
+    AtvesCamLocations, AtvesFinancial, AtvesTicketCameras, AtvesTrafficCounts, AtvesViolationCategories, AtvesViolations
 from atves.conduent import REDLIGHT, OVERHEIGHT
 
 
@@ -205,3 +205,34 @@ def test_process_violations(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str)
 
         ret = session.query(AtvesViolations)
         assert ret.count() > 1500
+
+
+def test_process_financials_overheight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
+    """Test process_overheight_financials"""
+    pass
+
+
+def test_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
+    """Test process_redlight_financials"""
+    engine = create_engine(conn_str, echo=True, future=True)
+    with Session(bind=engine, future=True) as session:
+        atvesdb_fixture_no_creds.process_redlight_financials(start_date=date(2021, 2, 1), end_date=date(2021, 2, 28))
+        ret = session.query(AtvesFinancial)
+        assert ret.count() == 0
+
+        atvesdb_fixture.process_redlight_financials(start_date=date(2021, 2, 1), end_date=date(2021, 2, 28))
+        ret = session.query(AtvesFinancial)
+        assert ret.count() > 10
+
+
+def test_process_financials_speed(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
+    """Test process_speed_financials"""
+    engine = create_engine(conn_str, echo=True, future=True)
+    with Session(bind=engine, future=True) as session:
+        atvesdb_fixture_no_creds.process_speed_financials(start_date=date(2021, 2, 1), end_date=date(2021, 2, 28))
+        ret = session.query(AtvesFinancial)
+        assert ret.count() == 0
+
+        atvesdb_fixture.process_speed_financials(start_date=date(2021, 2, 1), end_date=date(2021, 2, 28))
+        ret = session.query(AtvesFinancial)
+        assert ret.count() > 10
