@@ -14,7 +14,7 @@ setup(
         'requests~=2.25.1',
         'xlrd~=2.0.1',
         'retry~=0.9.2',
-        'pandas~=1.2.4',
+        'pandas~=1.2.5',
         'beautifulsoup4~=4.9.3',
         'loguru~=0.5.3',
         'sqlalchemy~=1.4.18',
