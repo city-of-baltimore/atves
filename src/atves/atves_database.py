@@ -16,9 +16,8 @@ from sqlalchemy.ext.declarative import DeclarativeMeta  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 from sqlalchemy.sql import text  # type: ignore
 
-from atves.atves_schema import AtvesAmberTimeRejects, AtvesApprovalByReviewDateDetails, AtvesByLocation, \
-    AtvesCamLocations, AtvesFinancial, AtvesTicketCameras, AtvesTrafficCounts, AtvesViolations, \
-    AtvesViolationCategories, Base
+from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFinancial, AtvesTrafficCounts, \
+    AtvesViolations, AtvesViolationCategories, Base
 from atves.axsis import Axsis
 from atves.conduent import Conduent, ALLCAMS, REDLIGHT, OVERHEIGHT
 from atves.financial import CobReports
@@ -37,6 +36,8 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):  # pylint:disable=u
 
 
 VIOLATION_TYPES = {
+            # To handle parse errors
+            0: 'Unknown',
             # Conduent: 1- In Process || Axsis: Events still in WF
             1: 'In Process',
             # Conduent: 2- Conduent/City Non Violations || Axsis: Non Events, PD Non Event
@@ -95,8 +96,7 @@ class AtvesDatabase:
 
         with Session(bind=self.engine, future=True) as session:
             # Look for missing location ids
-            location_codes = session.query(AtvesAmberTimeRejects.location_code).all()
-            location_codes += session.query(AtvesByLocation.location_code).all()
+            location_codes = session.query(AtvesViolations.location_code).all()
             location_codes += session.query(AtvesTrafficCounts.location_code).all()
 
             existing_location_codes = session.query(AtvesCamLocations.location_code).all()
@@ -105,13 +105,6 @@ class AtvesDatabase:
             if diff:
                 raise AssertionError('Missing location codes: {}'.format(diff))
 
-            # look for missing locations
-            locations = session.query(AtvesTicketCameras.location).all()
-            existing_locations = session.query(AtvesCamLocations.locationdescription).all()
-            diff = set(locations) - set(existing_locations)
-
-            if diff:
-                raise AssertionError('Missing locations: {}'.format(diff))
         self.location_db_built = True
 
     def build_violation_lookup_db(self) -> None:
@@ -223,16 +216,16 @@ class AtvesDatabase:
                                                          status=None))
 
         return True
-
+    """
     def process_conduent_reject_numbers(self, start_date: date, end_date: date, cam_type=ALLCAMS) -> None:
-        """
+
         Inserts data into the database from conduent rejection numbers
         :param start_date: Start date of the report to pull
         :param end_date: End date of the report to pull
         :param cam_type: Type of camera data to pull (use the constants conduent.REDLIGHT or conduent.OVERHEIGHT
             or conduent.ALLCAMS (default: conduent.ALLCAMS)
         :return: None
-        """
+
         logger.info('Processing conduent reject reports from {} to {}', start_date.strftime('%m/%d/%y'),
                     end_date.strftime('%m/%d/%y'))
 
@@ -248,15 +241,17 @@ class AtvesDatabase:
             return
 
         for row in data:
-            self._insert_or_update(AtvesTicketCameras(id=int(row['id']),
-                                                      start_time=row['start_time'],
-                                                      end_time=row['end_time'],
-                                                      location=str(row['location']).strip(),
-                                                      officer=str(row['officer']),
-                                                      equip_type=str(row['equip_type']),
-                                                      issued=int(row['issued']),
-                                                      rejected=int(row['rejected'])))
-
+            self._insert_or_update(AtvesViolations(date=row['start_time'],
+                                                   location_code=str(row['location']).strip(),
+                                                   count=int(row['issued']),
+                                                   violation_cat=VIOLATION_TYPES[2],
+                                                   details=""))
+            self._insert_or_update(AtvesViolations(date=row['start_time'],
+                                                   location_code=str(row['location']).strip(),
+                                                   count=int(row['rejected']),
+                                                   violation_cat=VIOLATION_TYPES[5],
+                                                   details=""))
+    """
     def process_conduent_data_amber_time(self, start_date: date, end_date: date) -> None:
         """
 
@@ -287,38 +282,6 @@ class AtvesDatabase:
                 amber_reject_code=str(row['Amber Reject Code']),
                 event_number=int(row['Event Number'])))
 
-    def process_conduent_data_approval_by_review_date(self, start_date: date, end_date: date, cam_type: int) -> None:
-        """
-
-        :param start_date: Start date of the report to pull
-        :param end_date: End date of the report to pull
-        :param cam_type: Either conduent.REDLIGHT or conduent.OVERHEIGHT
-        :return:
-        """
-        logger.info('Processing conduent data approval report from {} to {}', start_date.strftime('%m/%d/%y'),
-                    end_date.strftime('%m/%d/%y'))
-
-        if not self.conduent_interface:
-            logger.warning('Unable to run process_conduent_data_approval_by_review_date. It requires a Conduent '
-                           'session, which is not setup.')
-            return
-
-        self.build_location_db()
-        data = self.conduent_interface.get_approval_by_review_date_details(start_date, end_date, cam_type)
-
-        if data.empty:
-            return
-
-        for _, row in data.iterrows():
-            self._insert_or_update(AtvesApprovalByReviewDateDetails(
-                disapproved=int(row['Disapproved']),
-                approved=int(row['Approved']),
-                officer=str(row['Officer']),
-                citation_no=str(row['CitNum']),
-                violation_date=datetime.strptime(row['Vio Date'], '%b %d %Y %I:%M%p'),
-                review_status=str(row['Review Status']),
-                review_datetime=datetime.strptime('{} {}'.format(row['Review Date'], row['st']), '%m/%d/%Y %H:%M:%S')))
-
     def process_conduent_data_by_location(self, start_date: date, end_date: date, cam_type: int = ALLCAMS) -> None:
         """
 
@@ -339,7 +302,7 @@ class AtvesDatabase:
             self.process_conduent_data_by_location(start_date, end_date, OVERHEIGHT)
             return
 
-        def _get_int(value):
+        def _get_int(value) -> int:
             """Gets int on the front of the string"""
             pattern = re.compile(r'(\d*)')
             ret = 0
@@ -347,7 +310,7 @@ class AtvesDatabase:
                 match = pattern.match(value)
                 if match.lastindex < 1:
                     logger.error('Unable to parse location {}', value)
-                    ret = 9999
+                    ret = 0
                 else:
                     ret = match.group(1)
             return int(ret)
@@ -363,21 +326,12 @@ class AtvesDatabase:
             location_id = _get_int(row['Locations'])
             if location_id == 0:
                 continue
-            self._insert_or_update(AtvesByLocation(date=datetime.strptime(row['Date'], '%m/%d/%y').date(),
+            self._insert_or_update(AtvesViolations(date=datetime.strptime(row['Date'], '%m/%d/%y').date(),
                                                    location_code=location_id,
-                                                   section=str(row['Section']),
-                                                   details=str(row['Details']),
-                                                   percentage_desc=str(row['PercentageDescription']),
-                                                   issued=int(row['Issued']),
-                                                   in_process=int(row['InProcess']),
-                                                   non_violations=int(row['NonViolations']),
-                                                   controllable_rejects=int(row['ControllableRejects']),
-                                                   uncontrollable_rejects=int(row['UncontrollableRejects']),
-                                                   pending_initial_approval=int(row['PendingInitialapproval']),
-                                                   pending_reject_approval=int(row['PendingRejectapproval']),
-                                                   vcDescription=str(row['vcDescription']),
-                                                   detail_count=int(row['DetailCount']),
-                                                   order_by=_get_int(row['iOrderBy'])))
+                                                   count=int(row['DetailCount']),
+                                                   violation_cat=VIOLATION_TYPES[_get_int(row['iOrderBy'])],
+                                                   details=str(row['vcDescription']))
+                                   )
 
     def process_traffic_count_data(self, start_date: date, end_date: date) -> None:
         """

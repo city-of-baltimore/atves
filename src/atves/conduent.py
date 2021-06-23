@@ -271,12 +271,23 @@ class Conduent:
 
         start_date_str, end_date_str = self._convert_start_end_dates(start_date, end_date)
 
-        return self.get_report(report,
-                               cam_type,
-                               input_params={'TextBox0': start_date_str, 'TextBox1': end_date_str,
-                                             'ComboBox0': location},
-                               scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
-                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
+        ret = self.get_report(report,
+                              cam_type,
+                              input_params={'TextBox0': start_date_str, 'TextBox1': end_date_str,
+                                            'ComboBox0': location},
+                              scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
+                                             'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
+        ret['Vio Date'] = pd.to_datetime(ret['Vio Date'], format='%b %d %Y %I:%M%p').dt.date
+        ret['Review Status'] = ret['Review Status'].str.strip()
+
+        agg = {
+            'Disapproved': 'sum',
+            'Approved': 'sum'
+        }
+
+        ret = ret.groupby(['Vio Date', 'Review Status']).agg(agg).reset_index()
+
+        return ret
 
     def get_approval_summary_by_queue(self, start_date: date, end_date: date, cam_type: int,
                                       location='999,All Locations') -> pd.core.frame.DataFrame:
