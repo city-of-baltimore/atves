@@ -146,29 +146,30 @@ class Axsis:
         parameters['Parameters'][3]["ParmValue"] = "ALL"
 
         response = self._get_report(parameters, Reports.LOCATION_SUMMARY)
+        # drop thousands separators or they cause issues when we convert to Int64 (to deal with null values)
+        contents = response.content.replace(b',', b'')
 
         dtypes = {'Location Code': 'str',
                   'Location Description': 'str',
                   'Lane': 'int',
-                  'Vehicle Count': 'int',
-                  'Event (Violation Count)': 'int',
-                  'Total Rejects (G+H+I+J+K+L)': 'int',
-                  'Non Events': 'int',
-                  'Controllable': 'int',
-                  'Uncontrollable': 'int',
-                  'PD Non Events': 'int',
-                  'PD Controllable': 'int',
-                  'PD Uncontrollable': 'int',
-                  'Events still in WF': 'int',
-                  'Total Docs Issued (O+P+Q)': 'int',
-                  'Citations Issued': 'int',
-                  'Nov Issued': 'int',
-                  'Warning Issued': 'int'
+                  'Vehicle Count': 'Int64',
+                  'Event (Violation Count)': 'Int64',
+                  'Total Rejects (G+H+I+J+K+L)': 'Int64',
+                  'Non Events': 'Int64',
+                  'Controllable': 'Int64',
+                  'Uncontrollable': 'Int64',
+                  'PD Non Events': 'Int64',
+                  'PD Controllable': 'Int64',
+                  'PD Uncontrollable': 'Int64',
+                  'Events still in WF': 'Int64',
+                  'Total Docs Issued (O+P+Q)': 'Int64',
+                  'Citations Issued': 'Int64',
+                  'Nov Issued': 'Int64',
+                  'Warning Issued': 'Int64'
                   }
 
         columns = list(dtypes.keys()) + ['Last Violation Date']
-
-        dataframe = pd.read_csv(BytesIO(response.content), skiprows=[0, 1], names=columns, sep='\t', thousands=',',
+        dataframe = pd.read_csv(BytesIO(contents), skiprows=[0, 1], names=columns, sep='\t', thousands=',',
                                 dtype=dtypes, parse_dates=['Last Violation Date'])
 
         agg = {

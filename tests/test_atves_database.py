@@ -154,10 +154,10 @@ def test_process_violations(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str)
 
         atvesdb_fixture.process_violations(start_date=date(2021, 6, 1), end_date=date(2021, 6, 3))
         ret = session.query(AtvesViolationCategories)
-        assert ret.count() == 5
+        assert ret.count() == 6
 
         ret = session.query(AtvesViolations)
-        assert ret.count() > 1500
+        assert ret.count() > 3000
 
 
 def test_process_financials_overheight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):

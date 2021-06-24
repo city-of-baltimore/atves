@@ -253,7 +253,7 @@ class Conduent:
                                               'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
 
     def get_approval_by_review_date_details(self, start_date: date, end_date: date, cam_type: int,
-                                            location='999,All Locations') -> pd.core.frame.DataFrame:
+                                            location='999,All Locations') -> Optional[pd.core.frame.DataFrame]:
         """
         Downloads the report detailing approval by review date
         :param cam_type: Camera type to query. Either conduent.OVERHEIGHT or conduent.REDLIGHT
@@ -277,6 +277,9 @@ class Conduent:
                                             'ComboBox0': location},
                               scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
+        if ret is None:
+            return None
+
         ret['Vio Date'] = pd.to_datetime(ret['Vio Date'], format='%b %d %Y %I:%M%p').dt.date
         ret['Review Status'] = ret['Review Status'].str.strip()
 
