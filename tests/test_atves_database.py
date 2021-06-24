@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session  # type: ignore
 
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFinancial, AtvesTrafficCounts, \
     AtvesViolationCategories, AtvesViolations
-from atves.conduent import REDLIGHT, OVERHEIGHT
 
 
 def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):

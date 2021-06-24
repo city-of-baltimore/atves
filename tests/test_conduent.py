@@ -116,7 +116,6 @@ def test_get_approval_by_review_date_details(conduent_fixture):
         assert len(dataframe) > 5
         assert isinstance(dataframe.iloc[0].Disapproved, numbers.Number)
         assert isinstance(dataframe.iloc[0].Approved, numbers.Number)
-        assert isinstance(dataframe.iloc[0].Officer, str)
         assert isinstance(datetime.strptime(dataframe.iloc[0].get('Vio Date'), '%b %d %Y %I:%M%p'), datetime)
 
         assert dataframe.iloc[0].get('Review Status') in {'Plate Glare         ', 'Camera Not Focused  ',
@@ -135,9 +134,6 @@ def test_get_approval_by_review_date_details(conduent_fixture):
                                                           'Wrong Plate Keyed   ', 'Missing Video       ',
                                                           'Image Mismatch      ', 'Duplicate Violation ',
                                                           'Missing Traffic Ligh', 'Signal Glare        '}
-        assert isinstance(datetime.strptime(dataframe.iloc[0].get('Review Date'), "%m/%d/%Y"), datetime)
-        assert isinstance(datetime.strptime(dataframe.iloc[0].get('Review Time'), " %I:%M%p"), datetime)
-        assert isinstance(datetime.strptime(dataframe.iloc[0].st, "%H:%M:%S"), datetime)
 
     start_date = date(2020, 11, 1)
     end_date = date(2020, 11, 30)

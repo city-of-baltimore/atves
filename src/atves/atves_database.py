@@ -216,42 +216,7 @@ class AtvesDatabase:
                                                          status=None))
 
         return True
-    """
-    def process_conduent_reject_numbers(self, start_date: date, end_date: date, cam_type=ALLCAMS) -> None:
 
-        Inserts data into the database from conduent rejection numbers
-        :param start_date: Start date of the report to pull
-        :param end_date: End date of the report to pull
-        :param cam_type: Type of camera data to pull (use the constants conduent.REDLIGHT or conduent.OVERHEIGHT
-            or conduent.ALLCAMS (default: conduent.ALLCAMS)
-        :return: None
-
-        logger.info('Processing conduent reject reports from {} to {}', start_date.strftime('%m/%d/%y'),
-                    end_date.strftime('%m/%d/%y'))
-
-        if not self.conduent_interface:
-            logger.warning('Unable to run process_conduent_reject_numbers. It requires a Conduent session, which is not'
-                           ' setup.')
-            return
-
-        self.build_location_db()
-        data = self.conduent_interface.get_deployment_data(start_date, end_date, cam_type)
-
-        if not data:
-            return
-
-        for row in data:
-            self._insert_or_update(AtvesViolations(date=row['start_time'],
-                                                   location_code=str(row['location']).strip(),
-                                                   count=int(row['issued']),
-                                                   violation_cat=VIOLATION_TYPES[2],
-                                                   details=""))
-            self._insert_or_update(AtvesViolations(date=row['start_time'],
-                                                   location_code=str(row['location']).strip(),
-                                                   count=int(row['rejected']),
-                                                   violation_cat=VIOLATION_TYPES[5],
-                                                   details=""))
-    """
     def process_conduent_data_amber_time(self, start_date: date, end_date: date) -> None:
         """
 
@@ -308,12 +273,12 @@ class AtvesDatabase:
             ret = 0
             if value != 'All Locations':
                 match = pattern.match(value)
-                if match.lastindex < 1:
+                if match is None or match.lastindex is None or match.lastindex < 1:
                     logger.error('Unable to parse location {}', value)
                     ret = 0
                 else:
-                    ret = match.group(1)
-            return int(ret)
+                    ret = int(match.group(1))
+            return ret
 
         logger.info('Processing conduent location data reports from {} to {}', start_date.strftime('%m/%d/%y'),
                     end_date.strftime('%m/%d/%y'))
@@ -490,8 +455,8 @@ class AtvesDatabase:
             logger.warning('Unable to insert financial data. It requires a reports session, which is not setup.')
             return
 
-        df = self.financial_interface.get_general_ledger_detail(start_date, end_date, account, '55')
-        for index, row in df.iterrows():
+        ret = self.financial_interface.get_general_ledger_detail(start_date, end_date, account, '55')
+        for _, row in ret.iterrows():
             self._insert_or_update(AtvesFinancial(
                 journal_entry_no=row['JournalEntryNo'],
                 ledger_posting_date=row['LedgerPostingDate'],
@@ -642,17 +607,13 @@ if __name__ == '__main__':
 
     # Process over height cameras
     if args.oh or all_cams:
-        ad.process_conduent_reject_numbers(_start_date, _end_date, OVERHEIGHT)
         ad.process_conduent_data_by_location(_start_date, _end_date, OVERHEIGHT)
-        ad.process_conduent_data_approval_by_review_date(_start_date, _end_date, OVERHEIGHT)
         ad.process_overheight_financials(_start_date, _end_date)
 
     # Process red light cameras
     if args.rl or all_cams:
-        ad.process_conduent_reject_numbers(_start_date, _end_date, REDLIGHT)
         ad.process_conduent_data_by_location(_start_date, _end_date, REDLIGHT)
         ad.process_conduent_data_amber_time(_start_date, _end_date)
-        ad.process_conduent_data_approval_by_review_date(_start_date, _end_date, REDLIGHT)
         ad.process_redlight_financials(_start_date, _end_date)
 
     # Process speed cameras
