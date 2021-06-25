@@ -79,6 +79,7 @@ class AtvesDatabase:
         self.financial_interface = CobReports(report_user, report_pass) if report_user and report_pass else None
 
         self.location_db_built = False
+        self.violation_lookup_db_built = False
 
     def build_location_db(self, force: bool = False) -> None:
         """
@@ -109,8 +110,11 @@ class AtvesDatabase:
 
     def build_violation_lookup_db(self) -> None:
         """Builds a violation description lookup table"""
+        if self.violation_lookup_db_built:
+            return
         for vio_key, vio_desc in VIOLATION_TYPES.items():
             self._insert_or_update(AtvesViolationCategories(violation_cat=vio_key, description=vio_desc))
+        self.violation_lookup_db_built = True
 
     def _build_db_conduent_red_light(self) -> None:
         """Builds the camera location database for red light cameras"""
@@ -261,6 +265,7 @@ class AtvesDatabase:
             return
 
         self.build_location_db()
+        self.build_violation_lookup_db()
 
         if cam_type == ALLCAMS:
             self.process_conduent_data_by_location(start_date, end_date, REDLIGHT)
@@ -291,10 +296,11 @@ class AtvesDatabase:
             location_id = _get_int(row['Locations'])
             if location_id == 0:
                 continue
+            import pdb;pdb.set_trace()
             self._insert_or_update(AtvesViolations(date=datetime.strptime(row['Date'], '%m/%d/%y').date(),
                                                    location_code=location_id,
                                                    count=int(row['DetailCount']),
-                                                   violation_cat=VIOLATION_TYPES[_get_int(row['iOrderBy'])],
+                                                   violation_cat=_get_int(row['iOrderBy']),
                                                    details=str(row['vcDescription']))
                                    )
 
