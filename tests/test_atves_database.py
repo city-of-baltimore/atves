@@ -73,24 +73,6 @@ def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_cred
         assert len(lngs) > 10
 
 
-def test_atvesdb_process_conduent_reject_numbers(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
-    """Testing process_conduent_reject_numbers"""
-    engine = create_engine(conn_str, echo=True, future=True)
-    with Session(bind=engine, future=True) as session:
-        atvesdb_fixture_no_creds.process_conduent_reject_numbers(start_date=date(2020, 11, 1),
-                                                                 end_date=date(2020, 11, 3))
-        ret = session.query(AtvesViolations)
-        assert ret.count() == 0
-
-        atvesdb_fixture.process_conduent_reject_numbers(start_date=date(2010, 11, 1), end_date=date(2010, 11, 3))
-        ret = session.query(AtvesViolations)
-        assert ret.count() == 0
-
-        atvesdb_fixture.process_conduent_reject_numbers(start_date=date(2020, 11, 1), end_date=date(2020, 11, 3))
-        ret = session.query(AtvesViolations)
-        assert ret.count() > 300
-
-
 def test_atvesdb_process_conduent_data_amber_time(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
     """Testing process_conduent_data_amber_time"""
     engine = create_engine(conn_str, echo=True, future=True)
@@ -124,7 +106,7 @@ def test_atvesdb_process_conduent_data_by_location(atvesdb_fixture, atvesdb_fixt
 
         atvesdb_fixture.process_conduent_data_by_location(start_date=date(2020, 11, 1), end_date=date(2020, 11, 3))
         ret = session.query(AtvesViolations)
-        assert ret.count() > 2000
+        assert ret.count() > 1500
 
 
 def test_atvesdb_process_traffic_count_data(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
