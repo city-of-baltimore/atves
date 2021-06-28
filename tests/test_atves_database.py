@@ -142,11 +142,6 @@ def test_process_violations(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str)
         assert ret.count() > 3000
 
 
-def test_process_financials_overheight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
-    """Test process_overheight_financials"""
-    pass
-
-
 def test_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
     """Test process_redlight_financials"""
     engine = create_engine(conn_str, echo=True, future=True)
