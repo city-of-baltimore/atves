@@ -296,7 +296,6 @@ class AtvesDatabase:
             location_id = _get_int(row['Locations'])
             if location_id == 0:
                 continue
-            import pdb;pdb.set_trace()
             self._insert_or_update(AtvesViolations(date=datetime.strptime(row['Date'], '%m/%d/%y').date(),
                                                    location_code=location_id,
                                                    count=int(row['DetailCount']),
