@@ -88,6 +88,9 @@ def test_atvesdb_process_conduent_data_amber_time(atvesdb_fixture, atvesdb_fixtu
 
         atvesdb_fixture.process_conduent_data_amber_time(start_date=date(2020, 11, 1), end_date=date(2020, 11, 3))
         ret = session.query(AtvesAmberTimeRejects)
+        assert len([x.violation_date.date()
+                    for x in ret
+                    if x.violation_date.date() > date(2020, 11, 3) or x.violation_date.date() < date(2020, 11, 1)]) == 0
         assert ret.count() > 30
 
 
@@ -106,6 +109,7 @@ def test_atvesdb_process_conduent_data_by_location(atvesdb_fixture, atvesdb_fixt
 
         atvesdb_fixture.process_conduent_data_by_location(start_date=date(2020, 11, 1), end_date=date(2020, 11, 3))
         ret = session.query(AtvesViolations)
+        assert len([x.date for x in ret if x.date > date(2020, 11, 3) or x.date < date(2020, 11, 1)]) == 0
         assert ret.count() > 1500
 
 
@@ -123,10 +127,11 @@ def test_atvesdb_process_traffic_count_data(atvesdb_fixture, atvesdb_fixture_no_
 
         atvesdb_fixture.process_traffic_count_data(start_date=date(2020, 11, 1), end_date=date(2020, 11, 3))
         ret = session.query(AtvesTrafficCounts)
+        assert len([x.date for x in ret if x.date > date(2020, 11, 3) or x.date < date(2020, 11, 1)]) == 0
         assert ret.count() > 100
 
 
-def test_process_violations(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
+def test_atvesdb_process_violations(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
     """Testing process_violations"""
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
@@ -139,10 +144,11 @@ def test_process_violations(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str)
         assert ret.count() == 6
 
         ret = session.query(AtvesViolations)
+        assert len([x.date for x in ret if x.date > date(2021, 6, 3) or x.date < date(2021, 6, 1)]) == 0
         assert ret.count() > 3000
 
 
-def test_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
+def test_atvesdb_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
     """Test process_redlight_financials"""
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
@@ -152,10 +158,13 @@ def test_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no_creds, 
 
         atvesdb_fixture.process_redlight_financials(start_date=date(2021, 2, 1), end_date=date(2021, 2, 28))
         ret = session.query(AtvesFinancial)
+        assert len([x.ledger_posting_date
+                    for x in ret
+                    if x.ledger_posting_date > date(2021, 6, 3) or x.ledger_posting_date < date(2021, 6, 1)]) == 0
         assert ret.count() > 10
 
 
-def test_process_financials_speed(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
+def test_atvesdb_process_financials_speed(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
     """Test process_speed_financials"""
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
@@ -165,4 +174,7 @@ def test_process_financials_speed(atvesdb_fixture, atvesdb_fixture_no_creds, con
 
         atvesdb_fixture.process_speed_financials(start_date=date(2021, 2, 1), end_date=date(2021, 2, 28))
         ret = session.query(AtvesFinancial)
+        assert len([x.ledger_posting_date
+                    for x in ret
+                    if x.ledger_posting_date > date(2021, 2, 28) or x.ledger_posting_date < date(2021, 2, 1)]) == 0
         assert ret.count() > 10

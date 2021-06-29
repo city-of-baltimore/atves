@@ -112,11 +112,12 @@ def test_get_amber_time_rejects_report(conduent_fixture):
 def test_get_approval_by_review_date_details(conduent_fixture):
     """Tests get_approval_by_review_date_details"""
 
-    def verify_dataframes(dataframe):
+    def verify_dataframes(dataframe, _start_date: date, _end_date: date):
         assert len(dataframe) > 5
         assert isinstance(dataframe.iloc[0].Disapproved, numbers.Number)
         assert isinstance(dataframe.iloc[0].Approved, numbers.Number)
         assert isinstance(dataframe.iloc[0].get('Vio Date'), date)
+        assert _start_date <= dataframe.iloc[0].get('Vio Date') <= _end_date
 
         assert dataframe.iloc[0].get('Review Status') in {'Plate Glare         ', 'Camera Not Focused  ',
                                                           'Right on Red        ', 'Not Issued          ',
@@ -140,12 +141,12 @@ def test_get_approval_by_review_date_details(conduent_fixture):
 
     # redlight, all locations
     ret = conduent_fixture.get_approval_by_review_date_details(start_date, end_date, atves.conduent.REDLIGHT)
-    verify_dataframes(ret)
+    verify_dataframes(ret, start_date, end_date)
 
     # redlight, specific location
     ret = conduent_fixture.get_approval_by_review_date_details(start_date, end_date, atves.conduent.REDLIGHT,
                                                                '1,1002 - Reisterstown Rd SB @ Patterson Ave')
-    verify_dataframes(ret)
+    verify_dataframes(ret, start_date, end_date)
 
     # redlight, bad location
     ret = conduent_fixture.get_approval_by_review_date_details(start_date, end_date, atves.conduent.REDLIGHT,
