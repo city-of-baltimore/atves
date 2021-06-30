@@ -250,7 +250,8 @@ class Conduent:
                                input_params={'TextBox0': start_date_str, 'TextBox1': end_date_str,
                                              'ComboBox0': location},
                                scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
-                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
+                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'],
+                               parse_dates=['VioDate'])
 
     def get_approval_by_review_date_details(self, start_date: date, end_date: date, cam_type: int,
                                             location='999,All Locations') -> Optional[pd.core.frame.DataFrame]:
@@ -317,7 +318,8 @@ class Conduent:
                                input_params={'TextBox0': start_date_str, 'TextBox1': end_date_str,
                                              'ComboBox0': location},
                                scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
-                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
+                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'],
+                               parse_dates=['Review Date'])
 
     def get_client_summary_by_location(self, start_date: date, end_date: date, cam_type: int = ALLCAMS,
                                        location='999,All Locations') -> pd.core.frame.DataFrame:
@@ -356,7 +358,7 @@ class Conduent:
                                    scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
                                                   'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
             if data is not None:
-                data['Date'] = working_date.strftime("%m/%d/%y")
+                data['Date'] = working_date
                 ret = pd.concat([ret, data]) if ret is not None else data
             working_date += timedelta(days=1)
         return ret
@@ -413,7 +415,8 @@ class Conduent:
                                input_params={'TextBox0': start_date_str, 'TextBox1': end_date_str,
                                              'ComboBox0': location},
                                scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
-                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
+                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'],
+                               parse_dates=['Violation Date'])
 
     def get_traffic_counts_by_location(self,
                                        start_date: date,
@@ -432,7 +435,8 @@ class Conduent:
                                input_params={'TextBox0': start_date_str, 'TextBox1': end_date_str,
                                              'ComboBox0': location},
                                scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
-                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
+                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'],
+                               parse_dates=['Ddate'])
 
     def get_violations_issued_by_location(self,
                                           start_date: date,
@@ -464,7 +468,8 @@ class Conduent:
                                OVERHEIGHT,
                                input_params={'TextBox0': start_date_str, 'TextBox1': end_date_str},
                                scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hTextBoxCount',
-                                              'hComboBoxCount'])
+                                              'hComboBoxCount'],
+                               parse_dates=['TestDate'])
 
     def get_pending_client_approval(self, cam_type: int) -> pd.core.frame.DataFrame:
         """
@@ -482,7 +487,8 @@ class Conduent:
 
     @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
            retry=retry_if_exception_type(requests.exceptions.ConnectionError))
-    def get_report(self, report_type, cam_type, input_params=None, scrape_params=None) -> pd.core.frame.DataFrame:
+    def get_report(self, report_type, cam_type, input_params=None, scrape_params=None,
+                   parse_dates=None) -> pd.core.frame.DataFrame:
         """
         Pulls the specified report
         :param report_type: Report type, which is the same as what is posted to univReport.asp
@@ -492,6 +498,7 @@ class Conduent:
         :param scrape_params: (list) Parameters that are defined internally to citeweb, and need to be scraped from
         univReport. The parameters will be scraped from the tags as '<input NAME=VALUE...', and will be submitted to
         citeweb in the form of name:value
+        :param parse_dates: Directly passed to read_csv. See the documentation for pandas.read_csv
         :return: Report data
         """
         if cam_type == REDLIGHT:
@@ -563,7 +570,7 @@ class Conduent:
             return None
 
         # download the file and return it
-        return pd.read_csv('https://cw3.cite-web.com{}'.format(onclick.group(0)))
+        return pd.read_csv('https://cw3.cite-web.com{}'.format(onclick.group(0)), parse_dates=parse_dates)
 
     def _get_deployment_server(self, resp: requests.Response) -> None:
         """
