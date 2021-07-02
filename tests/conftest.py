@@ -1,6 +1,4 @@
 """Pytest directory-specific hook implementations"""
-import os
-
 import pytest
 from pandas import to_datetime  # type: ignore
 from sqlalchemy import create_engine  # type: ignore
@@ -116,8 +114,11 @@ def fixture_conn_str(tmp_path_factory):
 
 @pytest.fixture(name='reset_database')
 def fixture_reset_database(conn_str):
+    """
+    Resets the database, other than the camera locations. This gives us a clean DB without regenerating the camera
+    locations, which is a 2 minute process on each test
+    """
     engine = create_engine(conn_str, echo=True, future=True)
-    import pdb;pdb.set_trace()
     with Session(bind=engine) as session:
         session.query(AtvesTrafficCounts).delete(synchronize_session=False)
         session.query(AtvesAmberTimeRejects).delete(synchronize_session=False)

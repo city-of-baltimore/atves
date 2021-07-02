@@ -1,7 +1,7 @@
 """Tests atves.conduent"""
 import numbers
 from datetime import date, datetime
-from pandas.core.frame import DataFrame
+from pandas.core.frame import DataFrame  # type: ignore
 
 import pytest
 
@@ -367,4 +367,4 @@ def verify_dataframes_len_and_date(dataframe: DataFrame, date_field: str, start_
     assert len(dataframe) > length
     assert len([row[date_field]
                 for _, row in dataframe.iterrows()
-                if not(start_date <= row[date_field] <= end_date)]) == 0
+                if not start_date <= row[date_field] <= end_date]) == 0

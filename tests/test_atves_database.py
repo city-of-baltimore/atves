@@ -1,5 +1,5 @@
 """Test suite for atves_database.py"""
-# pylint:disable=protected-access
+# pylint:disable=protected-access,unused-argument
 from datetime import date
 
 from sqlalchemy import create_engine  # type: ignore
