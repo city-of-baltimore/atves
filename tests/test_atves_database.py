@@ -9,15 +9,11 @@ from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFi
     AtvesViolationCategories, AtvesViolations
 
 
-def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
+def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Testing _build_db_conduent_red_light"""
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
-        atvesdb_fixture_no_creds.build_location_db()
-        ret = session.query(AtvesCamLocations.cam_type).filter(AtvesCamLocations.cam_type == 'RL')
-        assert ret.count() == 0
-
-        atvesdb_fixture.build_location_db()
+        # atvesdb_fixture.build_location_db() is called in the setup
         ret = session.query(AtvesCamLocations.cam_type,
                             AtvesCamLocations.lat,
                             AtvesCamLocations.long).filter(AtvesCamLocations.cam_type == 'RL')
@@ -26,15 +22,11 @@ def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no
         assert all((39.2 < i[2] < 39.38 for i in ret.all()))
 
 
-def test_atvesdb_build_db_conduent_overheight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
+def test_atvesdb_build_db_conduent_overheight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Testing _build_db_conduent_overheight"""
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
-        atvesdb_fixture_no_creds.build_location_db()
-        ret = session.query(AtvesCamLocations.cam_type).filter(AtvesCamLocations.cam_type == 'OH')
-        assert ret.count() == 0
-
-        atvesdb_fixture.build_location_db()
+        # atvesdb_fixture.build_location_db() is called in the setup
         ret = session.query(AtvesCamLocations.cam_type,
                             AtvesCamLocations.lat,
                             AtvesCamLocations.long,
@@ -50,15 +42,11 @@ def test_atvesdb_build_db_conduent_overheight(atvesdb_fixture, atvesdb_fixture_n
         assert len(lngs) > 8
 
 
-def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
+def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Testing _build_db_speed_cameras"""
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
-        atvesdb_fixture_no_creds.build_location_db()
-        ret = session.query(AtvesCamLocations.cam_type).filter(AtvesCamLocations.cam_type == 'SC')
-        assert ret.count() == 0
-
-        atvesdb_fixture.build_location_db()
+        # atvesdb_fixture.build_location_db() is called in the setup
         ret = session.query(AtvesCamLocations.cam_type,
                             AtvesCamLocations.lat,
                             AtvesCamLocations.long).filter(AtvesCamLocations.cam_type == 'SC')
@@ -73,7 +61,7 @@ def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_cred
         assert len(lngs) > 10
 
 
-def test_atvesdb_process_conduent_data_amber_time(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
+def test_atvesdb_process_conduent_data_amber_time(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Testing process_conduent_data_amber_time"""
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
@@ -94,7 +82,7 @@ def test_atvesdb_process_conduent_data_amber_time(atvesdb_fixture, atvesdb_fixtu
         assert ret.count() > 30
 
 
-def test_atvesdb_process_conduent_data_by_location(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
+def test_atvesdb_process_conduent_data_by_location(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Testing process_conduent_data_by_location"""
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
@@ -113,7 +101,7 @@ def test_atvesdb_process_conduent_data_by_location(atvesdb_fixture, atvesdb_fixt
         assert ret.count() > 1500
 
 
-def test_atvesdb_process_traffic_count_data(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
+def test_atvesdb_process_traffic_count_data(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Testing process_traffic_count_data"""
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
@@ -131,7 +119,7 @@ def test_atvesdb_process_traffic_count_data(atvesdb_fixture, atvesdb_fixture_no_
         assert ret.count() > 100
 
 
-def test_atvesdb_process_violations(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
+def test_atvesdb_process_violations(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Testing process_violations"""
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
@@ -148,33 +136,37 @@ def test_atvesdb_process_violations(atvesdb_fixture, atvesdb_fixture_no_creds, c
         assert ret.count() > 3000
 
 
-def test_atvesdb_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
+def test_atvesdb_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Test process_redlight_financials"""
+    start_date = date(2021, 2, 1)
+    end_date = date(2021, 2, 28)
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
-        atvesdb_fixture_no_creds.process_redlight_financials(start_date=date(2021, 2, 1), end_date=date(2021, 2, 28))
+        atvesdb_fixture_no_creds.process_redlight_financials(start_date=start_date, end_date=end_date)
         ret = session.query(AtvesFinancial)
         assert ret.count() == 0
 
-        atvesdb_fixture.process_redlight_financials(start_date=date(2021, 2, 1), end_date=date(2021, 2, 28))
+        atvesdb_fixture.process_redlight_financials(start_date=start_date, end_date=end_date)
         ret = session.query(AtvesFinancial)
         assert len([x.ledger_posting_date
                     for x in ret
-                    if x.ledger_posting_date > date(2021, 6, 3) or x.ledger_posting_date < date(2021, 6, 1)]) == 0
+                    if x.ledger_posting_date > end_date or x.ledger_posting_date < start_date]) == 0
         assert ret.count() > 10
 
 
-def test_atvesdb_process_financials_speed(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str):
+def test_atvesdb_process_financials_speed(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Test process_speed_financials"""
+    start_date = date(2021, 2, 1)
+    end_date = date(2021, 2, 28)
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
-        atvesdb_fixture_no_creds.process_speed_financials(start_date=date(2021, 2, 1), end_date=date(2021, 2, 28))
+        atvesdb_fixture_no_creds.process_speed_financials(start_date=start_date, end_date=end_date)
         ret = session.query(AtvesFinancial)
         assert ret.count() == 0
 
-        atvesdb_fixture.process_speed_financials(start_date=date(2021, 2, 1), end_date=date(2021, 2, 28))
+        atvesdb_fixture.process_speed_financials(start_date=start_date, end_date=end_date)
         ret = session.query(AtvesFinancial)
         assert len([x.ledger_posting_date
                     for x in ret
-                    if x.ledger_posting_date > date(2021, 2, 28) or x.ledger_posting_date < date(2021, 2, 1)]) == 0
+                    if x.ledger_posting_date > end_date or x.ledger_posting_date < start_date]) == 0
         assert ret.count() > 10

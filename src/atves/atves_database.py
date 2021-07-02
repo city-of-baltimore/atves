@@ -136,6 +136,8 @@ class AtvesDatabase:
 
             try:
                 lat, lng = self.get_lat_long(ret['location'])
+                if not (lat or lng):
+                    continue
                 edate = None
                 if ret['effective_date'] is not None:
                     edate = datetime.strptime(ret['effective_date'], '%b %d, %Y')
@@ -163,6 +165,8 @@ class AtvesDatabase:
 
         for location_code, location in oh_list:
             lat, lng = self.get_lat_long(location)
+            if not (lat and lng):
+                continue
             self._insert_or_update(AtvesCamLocations(location_code=location_code,
                                                      locationdescription=location,
                                                      lat=lat,
@@ -210,6 +214,8 @@ class AtvesDatabase:
                     continue
 
                 lat, lng = self.get_lat_long(location)
+                if not (lat and lng):
+                    continue
                 self._insert_or_update(AtvesCamLocations(location_code=location_code,
                                                          locationdescription=location,
                                                          lat=lat,
@@ -246,7 +252,7 @@ class AtvesDatabase:
             self._insert_or_update(AtvesAmberTimeRejects(
                 location_code=int(row['iLocationCode']),
                 deployment_no=int(row['Deployment Number']),
-                violation_date=datetime.strptime(row['VioDate'], '%m/%d/%Y %I:%M:%S %p'),
+                violation_date=row['VioDate'],
                 amber_time=float(row['Amber Time']),
                 amber_reject_code=str(row['Amber Reject Code']),
                 event_number=int(row['Event Number'])))
@@ -296,7 +302,7 @@ class AtvesDatabase:
             location_id = _get_int(row['Locations'])
             if location_id == 0:
                 continue
-            self._insert_or_update(AtvesViolations(date=datetime.strptime(row['Date'], '%m/%d/%y').date(),
+            self._insert_or_update(AtvesViolations(date=row['Date'],
                                                    location_code=location_id,
                                                    count=int(row['DetailCount']),
                                                    violation_cat=_get_int(row['iOrderBy']),
@@ -324,8 +330,9 @@ class AtvesDatabase:
             return
 
         # Get data from speed cameras. There are issues pulling more than 90 days of data, so we split if its larger
+        tmp_end_date = start_date + timedelta(days=90) if (end_date - start_date).days > 90 else end_date
         tmp_start_date = start_date
-        tmp_end_date = start_date + timedelta(days=90)
+
         while True:
 
             axsis_data = self.axsis_interface.get_traffic_counts(tmp_start_date, tmp_end_date)
@@ -356,7 +363,7 @@ class AtvesDatabase:
         conduent_data = self.conduent_interface.get_traffic_counts_by_location(start_date, end_date)
         for _, row in conduent_data.iterrows():
             self._insert_or_update(AtvesTrafficCounts(location_code=str(row['iLocationCode']).strip(),
-                                                      date=datetime.strptime(row['Ddate'], '%m/%d/%Y').date(),
+                                                      date=row['Ddate'],
                                                       count=int(row['VehPass'])))
 
     def process_violations(self, start_date: date, end_date: date) -> None:
@@ -408,7 +415,7 @@ class AtvesDatabase:
 
         conduent_data = self.conduent_interface.get_client_summary_by_location(start_date, end_date)
         for _, row in conduent_data.iterrows():
-            self._insert_or_update(AtvesViolations(date=datetime.strptime(row['Date'], '%m/%d/%y'),
+            self._insert_or_update(AtvesViolations(date=row['Date'],
                                                    location_code=row['Locations'],
                                                    count=row['DetailCount'],
                                                    violation_cat=violation_lookup[row['iOrderBy']],
@@ -561,6 +568,7 @@ class AtvesDatabase:
         street_address = street_address.replace('JONES FALLS', 'I-83')
         street_address = street_address.replace('JONES FALLS EXPWY', 'I-83')
         street_address = street_address.replace('JONES FALLS EXPRESSWAY', 'I-83')
+        street_address = street_address.replace('BLKLOCH', 'LOCH')
         street_address = street_address.replace(' HW', ' HWY')
         street_address = street_address.replace(' SB', '')
         street_address = street_address.replace(' NB', '')

@@ -135,7 +135,8 @@ def test_conduent_get_approval_by_review_date_details(conduent_fixture):
                                                 'Data Bar Error', 'Missing Make',
                                                 'Wrong Plate Keyed', 'Missing Video',
                                                 'Image Mismatch', 'Duplicate Violation',
-                                                'Missing Traffic Ligh', 'Signal Glare'}
+                                                'Missing Traffic Ligh', 'Signal Glare',
+                                                'Delivery Vehicle'}
 
     start_date = date(2020, 11, 1)
     end_date = date(2020, 11, 30)
@@ -364,4 +365,6 @@ def verify_dataframes_len_and_date(dataframe: DataFrame, date_field: str, start_
     :param length: The minimum number of results we are expecting
     """
     assert len(dataframe) > length
-    assert len([row[date_field] for _, row in dataframe.iterrows() if not(start_date <= row[date_field] <= end_date)]) == 0
+    assert len([row[date_field]
+                for _, row in dataframe.iterrows()
+                if not(start_date <= row[date_field] <= end_date)]) == 0

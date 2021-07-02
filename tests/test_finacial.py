@@ -2,8 +2,13 @@
 from datetime import date
 
 
-def test_get_general_ledger_detail(cobreport_fixture):
+def test_financial_get_general_ledger_detail(cobreport_fixture):
     """Tests get_general_ledger_detail"""
-    res = cobreport_fixture.get_general_ledger_detail(date(2021, 2, 1), date(2021, 2, 4), 'A00119120300000', '55')
+    start_date = date(2021, 2, 1)
+    end_date = date(2021, 2, 4)
+    res = cobreport_fixture.get_general_ledger_detail(start_date, end_date, 'A00119120300000', '55')
+    assert len([row['LedgerPostingDate']
+                for _, row in res.iterrows()
+                if not (start_date <= row['LedgerPostingDate'] <= end_date)])
     assert len(res) > 5
     assert len(res.columns) == 17
