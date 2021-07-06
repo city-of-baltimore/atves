@@ -487,8 +487,8 @@ class Conduent:
 
     @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
            retry=retry_if_exception_type(requests.exceptions.ConnectionError))
-    def get_report(self, report_type, cam_type, input_params=None, scrape_params=None,
-                   parse_dates=None) -> pd.core.frame.DataFrame:  # pylint:disable=too-many-arguments,too-many-locals
+    def get_report(self, report_type, cam_type, input_params=None,  # pylint:disable=too-many-arguments,too-many-locals
+                   scrape_params=None, parse_dates=None) -> pd.core.frame.DataFrame:
         """
         Pulls the specified report
         :param report_type: Report type, which is the same as what is posted to univReport.asp

@@ -23,7 +23,7 @@ class AtvesCamLocations(Base):
     __tablename__ = "atves_cam_locations"
 
     location_code = Column(String(length=100), primary_key=True)
-    locationdescription = Column(String(length=100), nullable=False, unique=True)
+    locationdescription = Column(String(length=100), nullable=False)
     lat = Column(Numeric(precision=6, scale=4))
     long = Column(Numeric(precision=6, scale=4))
     cam_type = Column(String(length=2), nullable=False)
@@ -72,7 +72,7 @@ class AtvesFinancial(Base):
     """General ledger detail reports"""
     __tablename__ = 'atves_financial'
 
-    journal_entry_no = Column(Integer, primary_key=True)
+    journal_entry_no = Column(String(length=30), primary_key=True)
     ledger_posting_date = Column(Date, nullable=False)
     account_no = Column(String(length=50))
     legacy_account_no = Column(String(length=50))

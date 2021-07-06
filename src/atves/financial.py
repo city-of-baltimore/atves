@@ -114,7 +114,7 @@ class CobReports:
         logger.debug("Got {} bytes of data".format(len(csv_data)))
 
         dtypes = {
-            'JournalEntryNo': int,
+            'JournalEntryNo': str,
             'LedgerPostingDate': str,
             'AccountNo': str,
             'LegacyAccountNo': str,
@@ -140,7 +140,8 @@ class CobReports:
         ret[df_obj.columns] = df_obj.apply(lambda x: x.str.strip())
 
         # Make the amount a float
-        ret['Amount'] = ret['Amount'].replace(r'[\$,)]', '', regex=True).replace('[(]', '-', regex=True).astype(float)
+        ret['Amount'] = ret['Amount'].replace(r'[\$,)]', '', regex=True).replace('[(]', '-', regex=True).fillna(0)\
+            .astype(float)
 
         return ret
 

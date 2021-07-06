@@ -190,11 +190,12 @@ class AtvesDatabase:
                 logger.error('Unable to get speed camera information')
                 return False
 
-            active_cams = [param_elem.get('Value') for param in report_details['Parameters']
+            active_cams = [param_elem.get('Description').split(' - ')
+                           for param in report_details['Parameters']
                            if param['ParmTitle'] == 'Violation Locations' and param['ParmList'] is not None
                            for param_elem in param['ParmList']]
 
-            for location_code in active_cams:
+            for location_code, location in active_cams:
                 if not location_code:
                     continue
 
@@ -204,11 +205,8 @@ class AtvesDatabase:
 
                 try:
                     cam_date: Optional[datetime] = datetime.strptime(traffic_counts[0][1], '%Y-%m-%d')
-                    axsis_data = self.axsis_interface.get_traffic_counts(cam_date, cam_date)
-                    location = [x for x in axsis_data.values.tolist() if x[0] == location_code][0][1]
                 except IndexError:
                     cam_date = None
-                    location = self.axsis_interface.get_location_info(location_code)
 
                 if not location:
                     continue
