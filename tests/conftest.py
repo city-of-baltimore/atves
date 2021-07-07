@@ -17,6 +17,7 @@ def pytest_addoption(parser):
     parser.addoption('--conduent-pass', action='store')
     parser.addoption('--report-user', action='store')
     parser.addoption('--report-pass', action='store')
+    parser.addoption('--runvpntests', action='store_true', help='Run financial tests that require the VPN')
 
 
 @pytest.fixture(scope='session', name='axsis_username')
@@ -126,3 +127,13 @@ def fixture_reset_database(conn_str):
         session.query(AtvesViolationCategories).delete(synchronize_session=False)
         session.query(AtvesFinancial).delete(synchronize_session=False)
         session.commit()
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--runvpntests"):
+        # --runvpntests given in cli: do not skip slow tests
+        return
+    skip_vpn = pytest.mark.skip(reason="need --runvpntests option to run")
+    for item in items:
+        if "vpn" in item.keywords:
+            item.add_marker(skip_vpn)
