@@ -1,7 +1,9 @@
 """Tests test_finacial.py"""
+import pytest
 from datetime import date
 
 
+@pytest.mark.vpn
 def test_financial_get_general_ledger_detail(cobreport_fixture):
     """Tests get_general_ledger_detail"""
     start_date = date(2021, 2, 1)

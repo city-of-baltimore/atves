@@ -1,5 +1,6 @@
 """Test suite for atves_database.py"""
 # pylint:disable=protected-access,unused-argument
+import pytest
 from datetime import date
 
 from sqlalchemy import create_engine  # type: ignore
@@ -136,6 +137,7 @@ def test_atvesdb_process_violations(atvesdb_fixture, atvesdb_fixture_no_creds, c
         assert ret.count() > 3000
 
 
+@pytest.mark.vpn
 def test_atvesdb_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Test process_redlight_financials"""
     start_date = date(2021, 2, 1)
@@ -154,6 +156,7 @@ def test_atvesdb_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no
         assert ret.count() > 10
 
 
+@pytest.mark.vpn
 def test_atvesdb_process_financials_speed(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Test process_speed_financials"""
     start_date = date(2021, 2, 1)
