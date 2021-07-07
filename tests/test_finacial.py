@@ -1,6 +1,6 @@
 """Tests test_finacial.py"""
-import pytest
 from datetime import date
+import pytest
 
 
 @pytest.mark.vpn

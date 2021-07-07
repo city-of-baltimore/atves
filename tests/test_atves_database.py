@@ -1,7 +1,8 @@
 """Test suite for atves_database.py"""
 # pylint:disable=protected-access,unused-argument
-import pytest
 from datetime import date
+
+import pytest
 
 from sqlalchemy import create_engine  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
@@ -135,6 +136,11 @@ def test_atvesdb_process_violations(atvesdb_fixture, atvesdb_fixture_no_creds, c
         ret = session.query(AtvesViolations)
         assert len([x.date for x in ret if x.date > date(2021, 6, 3) or x.date < date(2021, 6, 1)]) == 0
         assert ret.count() > 3000
+
+
+@pytest.mark.vpn
+def test_atvesdb_process_financials_overheight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
+    """Test process_overheight_financials"""
 
 
 @pytest.mark.vpn

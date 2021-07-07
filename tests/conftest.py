@@ -130,6 +130,7 @@ def fixture_reset_database(conn_str):
 
 
 def pytest_collection_modifyitems(config, items):
+    """Enables the --runvpntests flag that enables some financial tests that require a VPN connection"""
     if config.getoption("--runvpntests"):
         # --runvpntests given in cli: do not skip slow tests
         return
