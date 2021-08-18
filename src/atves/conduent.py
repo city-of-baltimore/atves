@@ -236,7 +236,7 @@ class Conduent:
     def get_amber_time_rejects_report(self,
                                       start_date: date,
                                       end_date: date,
-                                      location='999,All Locations') -> pd.core.frame.DataFrame:
+                                      location='999,All Locations') -> pd.DataFrame:
         """
         Downloads the amber time rejects report (red light only)
         :param start_date: Start date of the report to pull
@@ -254,7 +254,7 @@ class Conduent:
                                parse_dates=['VioDate'])
 
     def get_approval_by_review_date_details(self, start_date: date, end_date: date, cam_type: int,
-                                            location='999,All Locations') -> Optional[pd.core.frame.DataFrame]:
+                                            location='999,All Locations') -> Optional[pd.DataFrame]:
         """
         Downloads the report detailing approval by review date
         :param cam_type: Camera type to query. Either conduent.OVERHEIGHT or conduent.REDLIGHT
@@ -294,7 +294,7 @@ class Conduent:
         return ret
 
     def get_approval_summary_by_queue(self, start_date: date, end_date: date, cam_type: int,
-                                      location='999,All Locations') -> pd.core.frame.DataFrame:
+                                      location='999,All Locations') -> pd.DataFrame:
         """
         Downloads the approval summary by queue report
         :param cam_type: Camera type to query. Either conduent.OVERHEIGHT or conduent.REDLIGHT
@@ -322,7 +322,7 @@ class Conduent:
                                parse_dates=['Review Date'])
 
     def get_client_summary_by_location(self, start_date: date, end_date: date, cam_type: int = ALLCAMS,
-                                       location='999,All Locations') -> pd.core.frame.DataFrame:
+                                       location='999,All Locations') -> pd.DataFrame:
         """
         Downloads the client summary by location
         :param cam_type: Camera type to query. Either conduent.OVERHEIGHT, conduent.REDLIGHT, or conduent.ALLCAMS
@@ -366,7 +366,7 @@ class Conduent:
     def get_expired_by_location(self,
                                 start_date: date,
                                 end_date: date,
-                                location='999,All Locations') -> pd.core.frame.DataFrame:
+                                location='999,All Locations') -> pd.DataFrame:
         """
         Downloads the 'expired by location' report (redlight cameras only)
         :param start_date: Start date of the report to pull
@@ -384,7 +384,7 @@ class Conduent:
 
     def get_in_city_vs_out_of_city(self,
                                    start_date: date,
-                                   end_date: date) -> pd.core.frame.DataFrame:
+                                   end_date: date) -> pd.DataFrame:
         """
         Downloads the 'in city vs out of city' report (red light cameras only)
         :param start_date: Start date of the report to pull
@@ -401,7 +401,7 @@ class Conduent:
     def get_straight_thru_vs_right_turn(self,
                                         start_date: date,
                                         end_date: date,
-                                        location='999,All Locations') -> pd.core.frame.DataFrame:
+                                        location='999,All Locations') -> pd.DataFrame:
         """
         Downloads the 'straight thru vs right turn' report (red light cameras only)
         :param start_date: Start date of the report to pull
@@ -421,7 +421,7 @@ class Conduent:
     def get_traffic_counts_by_location(self,
                                        start_date: date,
                                        end_date: date,
-                                       location='999,All Locations') -> pd.core.frame.DataFrame:
+                                       location='999,All Locations') -> pd.DataFrame:
         """
         Downloads the 'traffic count by location' report (red light cameras only)
         :param start_date: Start date of the report to pull
@@ -440,7 +440,7 @@ class Conduent:
 
     def get_violations_issued_by_location(self,
                                           start_date: date,
-                                          end_date: date) -> pd.core.frame.DataFrame:
+                                          end_date: date) -> pd.DataFrame:
         """
         Downloads the 'violations issued by location' report (red light cameras only)
         :param start_date: Start date of the report to pull
@@ -456,7 +456,7 @@ class Conduent:
 
     def get_daily_self_test(self,
                             start_date: date,
-                            end_date: date) -> pd.core.frame.DataFrame:
+                            end_date: date) -> pd.DataFrame:
         """
         Downloads the daily self test report (overheight cameras only)
         :param start_date: Start date of the report to pull
@@ -471,7 +471,7 @@ class Conduent:
                                               'hComboBoxCount'],
                                parse_dates=['TestDate'])
 
-    def get_pending_client_approval(self, cam_type: int) -> pd.core.frame.DataFrame:
+    def get_pending_client_approval(self, cam_type: int) -> pd.DataFrame:
         """
         Downloads the pending client approval report (overheight cameras only)
         :return: pandas.core.frame.DataFrame
@@ -488,7 +488,7 @@ class Conduent:
     @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
            retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def get_report(self, report_type, cam_type, input_params=None,  # pylint:disable=too-many-arguments,too-many-locals
-                   scrape_params=None, parse_dates=None) -> pd.core.frame.DataFrame:
+                   scrape_params=None, parse_dates=None) -> Optional[pd.DataFrame]:
         """
         Pulls the specified report
         :param report_type: Report type, which is the same as what is posted to univReport.asp

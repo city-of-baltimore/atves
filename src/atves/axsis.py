@@ -30,6 +30,7 @@ class Reports(Enum):
 
 def log_and_validate_params(func):
     """Adds logging to the beginning of functions that call _get_report"""
+
     def wrapper(self, start_date, end_date, *args, **kwargs):
         logger.info('Getting data for {} from {} to {}', func.__name__, start_date, end_date)
         if (end_date - start_date).days > 90:
@@ -50,7 +51,7 @@ class Axsis:
         logger.debug("Creating session for user {}", username)
 
         self.session = requests.Session()
-        self.username = username
+        self.username = username.upper()
         self.password = password
         self.client_id = None
         self.client_code = None
@@ -250,33 +251,16 @@ class Axsis:
             'access_token': soup.find("input", {"name": "access_token"})["value"]
         }
 
-        self.session.post('https://webportal1.atsol.com/axsis.web/signin-oidc', headers=headers, data=data)
+        response = self.session.post('https://webportal1.atsol.com/axsis.web/signin-oidc', headers=headers, data=data)
+        soup = BeautifulSoup(response.content, "html.parser")
+        self.client_id = soup.find_all('input', id='clientId')[0]['value']
+        self.client_code = soup.find_all('input', id='clientCode')[0]['value']
 
         list_of_cookies = requests.utils.dict_from_cookiejar(self.session.cookies)
         for cookie_name in ['idsrv', 'idsrv.session', 'f5-axsisweb-lb-cookie', '_mvc3authcougar']:
             if cookie_name not in list_of_cookies.keys():
                 raise AssertionError("Cookie {} not in list of valid cookie: {}".format(
                     cookie_name, list_of_cookies.keys()))
-
-    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
-           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
-    def _get_client_id(self) -> None:
-        """
-        Gets the client id and client code associated with self.username and assigns them to those attributes
-        :return: None
-        """
-        if self.client_code and self.client_id:
-            # if we already have the values, then skip is
-            return
-
-        headers = {
-            'Accept': ACCEPT_HEADER,
-        }
-
-        response = self.session.get('https://webportal1.atsol.com/axsis.web/Account/Login', headers=headers)
-        soup = BeautifulSoup(response.content, "html.parser")
-        self.client_id = soup.find_all('input', id='clientId')[0]['value']
-        self.client_code = soup.find_all('input', id='clientCode')[0]['value']
 
     @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
            retry=retry_if_exception_type(requests.exceptions.ConnectionError))
@@ -291,7 +275,6 @@ class Axsis:
             'Accept': 'application/json, text/javascript, */*; q=0.01',
         }
 
-        self._get_client_id()
         params = (
             ('clientId', self.client_id),
             ('clientCode', self.client_code),
@@ -320,7 +303,6 @@ class Axsis:
         :return: List of dictionaries of the parameter definitions. If the report name isn't found, then return None.
         """
         logger.info("Getting report {}", report_name)
-        self._get_client_id()
         report_id = self._get_reports(report_name)
         params = (
             ('clientId', self.client_id),
@@ -339,7 +321,9 @@ class Axsis:
                                     headers=headers,
                                     params=params)
         ret: ReportsDetailType = cast(ReportsDetailType, self._pythonify_literal(response.content.decode()))
-        if ret.get('Message') and 'No HTTP resource was found that matches the request URI' in ret['Message']:
+        if ret.get('Message') and \
+                ('No HTTP resource was found that matches the request URI' in ret['Message'] or
+                 ('An error has occurred' in ret['Message'])):
             # We requested an invalid report name
             return None
         return ret

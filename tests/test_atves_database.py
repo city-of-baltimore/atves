@@ -1,14 +1,19 @@
 """Test suite for atves_database.py"""
 # pylint:disable=protected-access,unused-argument
+import sys
+import warnings
 from datetime import date
+from pathlib import Path
 
 import pytest
+from loguru import logger
 
-from sqlalchemy import create_engine  # type: ignore
+from sqlalchemy import create_engine, exc as sa_exc  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFinancial, AtvesTrafficCounts, \
     AtvesViolationCategories, AtvesViolations
+from atves.atves_database import parse_args
 
 
 def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
@@ -32,16 +37,25 @@ def test_atvesdb_build_db_conduent_overheight(atvesdb_fixture, atvesdb_fixture_n
         ret = session.query(AtvesCamLocations.cam_type,
                             AtvesCamLocations.lat,
                             AtvesCamLocations.long,
-                            AtvesCamLocations.locationdescription).filter(AtvesCamLocations.cam_type == 'OH')
+                            AtvesCamLocations.locationdescription,
+                            AtvesCamLocations.speed_limit,
+                            AtvesCamLocations.effective_date).filter(AtvesCamLocations.cam_type == 'OH')
         assert ret.count() > 10
 
         # throw away None results, but make sure its not all of them
-        lats = [-76.73 < i[1] < -76.52 for i in ret.all() if i[1]]
-        lngs = [39.2 < i[2] < 39.38 for i in ret.all() if i[2]]
-        assert all(lats)
-        assert len(lats) > 8
-        assert all(lngs)
-        assert len(lngs) > 8
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=sa_exc.SAWarning)
+            vals = ret.all()
+            lats = [-76.73 < i[1] < -76.52 for i in vals if i[1]]
+            lngs = [39.2 < i[2] < 39.38 for i in vals if i[2]]
+            speed_limits = [i for i in vals if i[4]]
+            effective_dates = [i for i in vals if i[5]]
+            assert all(lats)
+            assert len(lats) > 8
+            assert all(lngs)
+            assert len(lngs) > 8
+            assert len(speed_limits) > 8
+            assert len(effective_dates) > 8
 
 
 def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
@@ -179,3 +193,56 @@ def test_atvesdb_process_financials_speed(atvesdb_fixture, atvesdb_fixture_no_cr
                     for x in ret
                     if x.ledger_posting_date > end_date or x.ledger_posting_date < start_date]) == 0
         assert ret.count() > 10
+
+
+def setup_logging(debug=False, info=False, path: Path = None):
+    """
+    Configures the logging level, and sets up file based logging. By default, the following logging levels are enabled:
+    fatal, error, and warn. This optionally enables info and debug.
+
+    :param debug: If true, the Debug logging level is used, and verbose is ignored
+    :param info: If true and debug is false, then the info log level is used
+    :param path: Base path where the logs folder should go. If not specified, then it uses the current dir
+    """
+    # Setup logging
+    log_level = 'WARNING'
+    if debug:
+        log_level = 'DEBUG'
+    elif info:
+        log_level = 'INFO'
+
+    if path:
+        log_path = path / 'logs' / 'file-{time}.log'
+    else:
+        log_path = Path('logs') / 'file-{time}.log'
+
+    handlers = [
+        {'sink': sys.stdout, 'format': '{time} - {message}', 'colorize': True, 'backtrace': True, 'diagnose': True,
+         'level': log_level},
+        {'sink': log_path, 'serialize': True, 'backtrace': True,
+         'diagnose': True, 'rotation': '1 week', 'retention': '3 months', 'compression': 'zip', 'level': log_level},
+    ]
+
+    logger.configure(handlers=handlers)
+
+
+def test_parse_args():
+    """Test parse_args"""
+    conn_str = 'conn_str'
+    start_date_str = '2021-07-20'
+    start_date = date(2021, 7, 20)
+    end_date_str = '2021-07-21'
+    end_date = date(2021, 7, 21)
+    args = parse_args(['-v', '-c', conn_str, '-s', start_date_str, '-e', end_date_str, '-a', '-o', '-r', '-t', '-p',
+                       '-b'])
+    assert args.verbose
+    assert not args.debug
+    assert args.conn_str == conn_str
+    assert args.startdate == start_date
+    assert args.enddate == end_date
+    assert args.allcams
+    assert args.oh
+    assert args.rl
+    assert args.tc
+    assert args.sc
+    assert args.builddb

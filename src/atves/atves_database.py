@@ -1,7 +1,10 @@
 """Pulls data through the Conduent and Axsis libraries, and inserts it into the database"""
 import argparse
+import inspect
 import math
+import os
 import re
+import sys
 from datetime import date, datetime, timedelta
 from sqlite3 import Connection as SQLite3Connection
 from typing import Optional
@@ -12,17 +15,17 @@ from loguru import logger
 from sqlalchemy import create_engine, event, inspect as sqlalchemyinspect  # type: ignore
 from sqlalchemy.engine import Engine  # type: ignore
 from sqlalchemy.exc import IntegrityError  # type: ignore
-from sqlalchemy.ext.declarative import DeclarativeMeta  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
+from sqlalchemy.orm.decl_api import DeclarativeMeta  # type: ignore
 from sqlalchemy.sql import text  # type: ignore
 
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFinancial, AtvesTrafficCounts, \
     AtvesViolations, AtvesViolationCategories, Base
 from atves.axsis import Axsis
 from atves.conduent import Conduent, ALLCAMS, REDLIGHT, OVERHEIGHT
-from atves.financial import CobReports
 from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDUENT_PASSWORD, REPORT_USERNAME, \
     REPORT_PASSWORD
+from atves.financial import CobReports
 
 GIS()
 
@@ -36,19 +39,19 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):  # pylint:disable=u
 
 
 VIOLATION_TYPES = {
-            # To handle parse errors
-            0: 'Unknown',
-            # Conduent: 1- In Process || Axsis: Events still in WF
-            1: 'In Process',
-            # Conduent: 2- Conduent/City Non Violations || Axsis: Non Events, PD Non Event
-            2: 'Non Violations',
-            # Conduent: 3- Conduent/City Rejects(Controllable) || Axsis: Controllable, PD Controllable
-            3: 'Controllable Reject',
-            # Conduent: 4- Conduent/City Rejects(Uncontrollable) || Axsis: Uncontrollable, PD Uncontrollable
-            4: 'Uncontrollable Reject',
-            # Conduent: 5- Violations Mailed, || Axsis: Citations Issued, Nov Issued, Warning Issued
-            5: 'Violation Issued'
-        }
+    # To handle parse errors
+    0: 'Unknown',
+    # Conduent: 1- In Process || Axsis: Events still in WF
+    1: 'In Process',
+    # Conduent: 2- Conduent/City Non Violations || Axsis: Non Events, PD Non Event
+    2: 'Non Violations',
+    # Conduent: 3- Conduent/City Rejects(Controllable) || Axsis: Controllable, PD Controllable
+    3: 'Controllable Reject',
+    # Conduent: 4- Conduent/City Rejects(Uncontrollable) || Axsis: Uncontrollable, PD Uncontrollable
+    4: 'Uncontrollable Reject',
+    # Conduent: 5- Violations Mailed, || Axsis: Citations Issued, Nov Issued, Warning Issued
+    5: 'Violation Issued'
+}
 
 
 class AtvesDatabase:
@@ -118,9 +121,21 @@ class AtvesDatabase:
 
     def _build_db_conduent_red_light(self) -> None:
         """Builds the camera location database for red light cameras"""
+        self._build_db_conduent(REDLIGHT)
+
+    def _build_db_conduent_overheight(self) -> None:
+        """Builds the camera location database for over height cameras"""
+        self._build_db_conduent(OVERHEIGHT)
+
+    def _build_db_conduent(self, cam_type: int) -> None:
+        """
+        Builds the camera location database
+
+        :param cam_type: Type of camera data to pull (use the constants conduent.REDLIGHT or conduent.OVERHEIGHT
+        :return: None
+        """
         if not self.conduent_interface:
-            logger.warning('Unable to run _build_db_conduent_red_light. It requires a Conduent session, which is not '
-                           'setup.')
+            logger.warning('Unable to run {}. No Conduent session is setup.', inspect.stack()[0][3])
             return
 
         failures = 0
@@ -129,7 +144,7 @@ class AtvesDatabase:
         # we use the 'failures' because we don't know the range of valid location ids
         while failures <= 50:
             loc_id += 1
-            ret = self.conduent_interface.get_location_by_id(loc_id, REDLIGHT)
+            ret = self.conduent_interface.get_location_by_id(loc_id, cam_type)
             if ret['site_code'] is None:
                 failures += 1
                 continue
@@ -153,28 +168,6 @@ class AtvesDatabase:
                     status=bool(ret['status'] == 'Active')))
             except RuntimeError as err:
                 logger.warning('Geocoder error: {}', err)
-
-    def _build_db_conduent_overheight(self) -> None:
-        """Builds the camera location database for over height cameras"""
-        if not self.conduent_interface:
-            logger.warning('Unable to run _build_db_conduent_overheight. It requires a Conduent session, which is not '
-                           'setup.')
-            return
-
-        oh_list = self.conduent_interface.get_overheight_cameras()
-
-        for location_code, location in oh_list:
-            lat, lng = self.get_lat_long(location)
-            if not (lat and lng):
-                continue
-            self._insert_or_update(AtvesCamLocations(location_code=location_code,
-                                                     locationdescription=location,
-                                                     lat=lat,
-                                                     long=lng,
-                                                     cam_type='OH',
-                                                     effective_date=None,
-                                                     speed_limit=None,
-                                                     status=None))
 
     def _build_db_speed_cameras(self) -> bool:
         """Builds the camera location database for speed cameras"""
@@ -332,7 +325,6 @@ class AtvesDatabase:
         tmp_start_date = start_date
 
         while True:
-
             axsis_data = self.axsis_interface.get_traffic_counts(tmp_start_date, tmp_end_date)
             axsis_data = axsis_data.to_dict('index')
             columns = axsis_data[0].keys() - ['Location code', 'Description', 'First Traf Evt', 'Last Traf Evt']
@@ -580,30 +572,65 @@ class AtvesDatabase:
         return street_address
 
 
-if __name__ == '__main__':
-    lastmonth = date.today() - timedelta(days=30)
-    parser = argparse.ArgumentParser(description='Traffic count importer')
-    parser.add_argument('-m', '--month', type=int, default=lastmonth.month,
-                        help=('Optional: Month of date we should start searching on (IE: 10 for Oct). Defaults to '
-                              'yesterday if not specified'))
-    parser.add_argument('-d', '--day', type=int, default=lastmonth.day,
-                        help=('Optional: Day of date we should start searching on (IE: 5). Defaults to yesterday if '
-                              'not specified'))
-    parser.add_argument('-y', '--year', type=int, default=lastmonth.year,
-                        help=('Optional: Four digit year we should start searching on (IE: 2020). Defaults to '
-                              'yesterday if not specified'))
-    parser.add_argument('-n', '--numofdays', default=30, type=int,
-                        help='Optional: Number of days to search, including the start date.')
+def setup_parser(help_str):
+    """Factory that creates the base argument parser"""
+    parser = argparse.ArgumentParser(description=help_str)
+    parser.add_argument('-v', '--verbose', action='store_true', help='Increased logging level')
+    parser.add_argument('-vv', '--debug', action='store_true', help='Print debug statements')
+    parser.add_argument('-c', '--conn_str', help='Database connection string',
+                        default='mssql+pyodbc://balt-sql311-prd/DOT_DATA?driver=ODBC Driver 17 for SQL Server')
+
+    return parser
+
+
+def setup_logging(debug=False, verbose=False):
+    """
+    Configures the logging level, and sets up file based logging
+
+    :param debug: If true, the Debug logging level is used, and verbose is ignored
+    :param verbose: If true and debug is false, then the info log level is used
+    """
+    # Setup logging
+    log_level = 'WARNING'
+    if debug:
+        log_level = 'DEBUG'
+    elif verbose:
+        log_level = 'INFO'
+
+    handlers = [
+        {'sink': sys.stdout, 'format': '{time} - {message}', 'colorize': True, 'backtrace': True, 'diagnose': True,
+         'level': log_level},
+        {'sink': os.path.join('logs', 'file-{time}.log'), 'serialize': True, 'backtrace': True,
+         'diagnose': True, 'rotation': '1 week', 'retention': '3 months', 'compression': 'zip', 'level': log_level},
+    ]
+
+    logger.configure(handlers=handlers)
+
+
+def parse_args(_args):
+    """Handles the argument parsing"""
+    parser = setup_parser('Data importer from the ATVES data providers')
+    start_date = date.today() - timedelta(days=365)
+    end_date = date.today() - timedelta(days=1)
+    parser.add_argument('-s', '--startdate', type=date.fromisoformat, default=start_date,
+                        help='First date to process, inclusive (format YYYY-MM-DD).')
+    parser.add_argument('-e', '--enddate', type=date.fromisoformat, default=end_date,
+                        help='Last date to process, inclusive (format YYYY-MM-DD).')
     parser.add_argument('-a', '--allcams', action='store_true', help='Process all camera types')
     parser.add_argument('-o', '--oh', action='store_true', help='Process over height cameras')
     parser.add_argument('-r', '--rl', action='store_true', help='Process red light cameras')
     parser.add_argument('-t', '--tc', action='store_true', help='Process traffic counts')
-    parser.add_argument('-s', '--sc', action='store_true', help='Process speed cameras')
+    parser.add_argument('-p', '--sc', action='store_true', help='Process speed cameras')
     parser.add_argument('-b', '--builddb', action='store_true',
                         help='Rebuilds (or updates) the camera location database')
 
-    args = parser.parse_args()
-    ad = AtvesDatabase(conn_str='mssql+pyodbc://balt-sql311-prd/DOT_DATA?driver=ODBC Driver 17 for SQL Server',
+    return parser.parse_args(_args)
+
+
+if __name__ == '__main__':
+    args = parse_args(sys.argv[1:])
+
+    ad = AtvesDatabase(conn_str=args.conn_str,
                        axsis_user=AXSIS_USERNAME, axsis_pass=AXSIS_PASSWORD, conduent_user=CONDUENT_USERNAME,
                        conduent_pass=CONDUENT_PASSWORD)
 

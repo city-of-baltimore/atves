@@ -1,9 +1,8 @@
 """Models used by sqlalchemy"""
 # pylint:disable=too-few-public-methods
 from sqlalchemy import Column, ForeignKey  # type: ignore
-from sqlalchemy.orm import relationship  # type: ignore
-from sqlalchemy.ext.declarative import DeclarativeMeta  # type: ignore
-from sqlalchemy.ext.declarative import declarative_base  # type: ignore
+from sqlalchemy.orm import declarative_base, relationship  # type: ignore
+from sqlalchemy.orm.decl_api import DeclarativeMeta  # type: ignore
 from sqlalchemy.types import Boolean, Date, DateTime, Integer, Numeric, String  # type: ignore
 
 Base: DeclarativeMeta = declarative_base()

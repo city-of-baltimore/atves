@@ -21,13 +21,6 @@ def test_get_location_summary_by_lane(axsis_fixture):
     assert len(ret) == 235
 
 
-def test_axsis_get_client_id(axsis_fixture):
-    """Test suite _get_client_id"""
-    axsis_fixture._get_client_id()
-    assert axsis_fixture.client_id is not None
-    assert axsis_fixture.client_code is not None
-
-
 def test_axsis_get_reports(axsis_fixture):
     """Test suite _get_reports"""
     assert axsis_fixture._get_reports('ENFORCEMENT EXPIRE') == 183
