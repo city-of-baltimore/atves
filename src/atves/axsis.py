@@ -1,15 +1,17 @@
 """Python wrapper around the Axsis Mobility Platform"""
 import ast
 from datetime import date, timedelta
+from enum import Enum
+from io import BytesIO
 from typing import cast, Dict, Optional
 
 import pandas as pd  # type: ignore
 import requests
-from urllib3 import util  # type: ignore
 import xlrd  # type: ignore
 from bs4 import BeautifulSoup  # type: ignore
 from loguru import logger
-from retry import retry
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
+from urllib3 import util  # type: ignore
 
 from atves.axsis_types import ReportsDetailType
 
@@ -17,6 +19,25 @@ ACCEPT_HEADER = ("text/html,application/xhtml+xml,application/xml;q=0.9,image/we
                  "signed-exchange;v=b3;q=0.9")
 
 util.ssl_.DEFAULT_CIPHERS = 'ALL:@SECLEVEL=1'
+
+
+# Report types
+class Reports(Enum):
+    """Defines used for Axsis._get_report"""
+    TRAFFIC_COUNTS = 1
+    LOCATION_SUMMARY = 2
+
+
+def log_and_validate_params(func):
+    """Adds logging to the beginning of functions that call _get_report"""
+
+    def wrapper(self, start_date, end_date, *args, **kwargs):
+        logger.info('Getting data for {} from {} to {}', func.__name__, start_date, end_date)
+        if (end_date - start_date).days > 90:
+            logger.warning('Axsis has issues generating reports with over 90 days of content')
+        return func(self, start_date, end_date, *args, **kwargs)
+
+    return wrapper
 
 
 class Axsis:
@@ -30,37 +51,31 @@ class Axsis:
         logger.debug("Creating session for user {}", username)
 
         self.session = requests.Session()
-        self.username = username
+        self.username = username.upper()
         self.password = password
         self.client_id = None
         self.client_code = None
         self._login()
 
-    @retry(exceptions=(requests.exceptions.ConnectionError, xlrd.biffh.XLRDError),
-           tries=10,
-           delay=10)
-    def get_traffic_counts(self, start_date: date, end_date: date) -> pd.DataFrame:
-        """
-        Get the 'Site activity by traffic events' report
-        :param start_date: First date to search, inclusive
-        :param end_date: Last date to search, inclusive
-        :return: Pandas data frame with the resulting data
-        """
-        logger.info('Getting traffic counts from {} to {}', start_date, end_date)
-        if (end_date - start_date).days > 90:
-            logger.warning('Axsis has issues generating reports with over 90 days of content')
-        headers = {
-            'Accept': 'application/json, text/javascript, */*; q=0.01',
-            'Content-Type': 'application/json;charset=UTF-8',
-            'Origin': 'https://webportal1.atsol.com',
+    def _get_report(self, parameters: ReportsDetailType, report_type: Reports) -> requests.Response:
+        reports = {
+            Reports.TRAFFIC_COUNTS: {
+                'desc': 'SITE ACTIVITY BY TRAFFIC EVENTS',
+                'filename': ('http://biportal/enterprisereportingservices/Reports/'
+                             'AXSIS Report/Site_Activity_by_Traffic_Events_AXSIS.rdl'),
+            },
+            Reports.LOCATION_SUMMARY: {
+                'desc': 'LOCATION PERFORMANCE SUMMARY BY LANE -- XML',
+                'filename': 'REPORT_LPSL.XML',
+            }
         }
 
-        parameters: ReportsDetailType = self.get_reports_detail("SITE ACTIVITY BY TRAFFIC EVENTS")
-        parameters['Parameters'][1]["ParmValue"] = start_date.strftime("%m/%d/%Y")
-        parameters['Parameters'][2]["ParmValue"] = end_date.strftime("%m/%d/%Y")
-
         response = self.session.post('https://webportal1.atsol.com/Axsis.Web/api/Report/PostCacheReportFile',
-                                     headers=headers, data=self._depythonify_literal(parameters))
+                                     headers={
+                                         'Accept': 'application/json, text/javascript, */*; q=0.01',
+                                         'Content-Type': 'application/json;charset=UTF-8',
+                                         'Origin': 'https://webportal1.atsol.com',
+                                     }, data=self._depythonify_literal(parameters))
 
         guid = response.content[1:-1]
 
@@ -71,23 +86,117 @@ class Axsis:
         params = (
             ('user', self.username),
             ('guid', guid),
-            ('filename',
-             ("http://biportal/enterprisereportingservices/"
-              "Reports/AXSIS Report/Site_Activity_by_Traffic_Events_AXSIS.rdl")),
-            ('description', 'SITE ACTIVITY BY TRAFFIC EVENTS'),
+            ('filename', reports[report_type]['filename']),
+            ('description', reports[report_type]['desc'])
         )
 
-        response = self.session.get('https://webportal1.atsol.com/Axsis.Web/Report/ReportFile', headers=headers,
-                                    params=params)
+        return self.session.get('https://webportal1.atsol.com/Axsis.Web/Report/ReportFile',
+                                headers=headers, params=params)
+
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=(retry_if_exception_type(requests.exceptions.ConnectionError) |
+                  retry_if_exception_type(xlrd.biffh.XLRDError)))
+    @log_and_validate_params
+    def get_traffic_counts(self, start_date: date, end_date: date) -> pd.DataFrame:
+        """
+        Get the 'Site activity by traffic events' report
+        :param start_date: First date to search, inclusive
+        :param end_date: Last date to search, inclusive
+        :return: Pandas data frame with the resulting data
+        """
+        parameters: Optional[ReportsDetailType] = self.get_reports_detail("SITE ACTIVITY BY TRAFFIC EVENTS")
+        if not parameters:
+            logger.error('Unable to get traffic counts')
+            return pd.DataFrame()
+
+        parameters['Parameters'][1]["ParmValue"] = start_date.strftime("%m/%d/%Y")
+        parameters['Parameters'][2]["ParmValue"] = end_date.strftime("%m/%d/%Y")
+
+        response = self._get_report(parameters, Reports.TRAFFIC_COUNTS)
 
         columns = ['Location code', 'Description', 'First Traf Evt', 'Last Traf Evt'] + \
                   [(start_date + timedelta(days=x)).strftime("%m/%d/%Y")
                    for x in range((end_date - start_date).days + 1)]
         return pd.read_excel(response.content, skiprows=[0, 1], names=columns)
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=(retry_if_exception_type(requests.exceptions.ConnectionError) |
+                  retry_if_exception_type(xlrd.biffh.XLRDError)))
+    def get_location_summary_by_lane(self, start_date: date, end_date: date) -> pd.DataFrame:
+        """
+        Get the 'Location Performance Summary by Lane' report to get total violations
+        :param start_date: First date to search, inclusive
+        :param end_date: Last date to search, inclusive
+        :return: Pandas data frame with the resulting data
+        """
+        delta = (end_date - start_date).days
+        ret = []
+        if delta > 0:
+            for i in range(delta + 1):
+                cur_date = start_date + timedelta(days=i)
+                ret.append(self.get_location_summary_by_lane(cur_date, cur_date))
+            return pd.concat(ret)
+
+        parameters: Optional[ReportsDetailType] = self.get_reports_detail("LOCATION PERFORMANCE SUMMARY BY LANE -- XML")
+        if not parameters:
+            logger.error("Unable to get location summary by lane")
+            return pd.DataFrame()
+
+        parameters['Parameters'][1]["ParmValue"] = start_date.strftime("%m/%d/%Y")
+        parameters['Parameters'][2]["ParmValue"] = end_date.strftime("%m/%d/%Y")
+        parameters['Parameters'][3]["ParmValue"] = "ALL"
+
+        response = self._get_report(parameters, Reports.LOCATION_SUMMARY)
+        # drop thousands separators or they cause issues when we convert to Int64 (to deal with null values)
+        contents = response.content.replace(b',', b'')
+
+        dtypes = {'Location Code': 'str',
+                  'Location Description': 'str',
+                  'Lane': 'int',
+                  'Vehicle Count': 'Int64',
+                  'Event (Violation Count)': 'Int64',
+                  'Total Rejects (G+H+I+J+K+L)': 'Int64',
+                  'Non Events': 'Int64',
+                  'Controllable': 'Int64',
+                  'Uncontrollable': 'Int64',
+                  'PD Non Events': 'Int64',
+                  'PD Controllable': 'Int64',
+                  'PD Uncontrollable': 'Int64',
+                  'Events still in WF': 'Int64',
+                  'Total Docs Issued (O+P+Q)': 'Int64',
+                  'Citations Issued': 'Int64',
+                  'Nov Issued': 'Int64',
+                  'Warning Issued': 'Int64'
+                  }
+
+        columns = list(dtypes.keys()) + ['Last Violation Date']
+        dataframe = pd.read_csv(BytesIO(contents), skiprows=[0, 1], names=columns, sep='\t', thousands=',',
+                                dtype=dtypes, parse_dates=['Last Violation Date'])
+
+        agg = {
+            'Date': 'first',
+            'Location Code': 'first',
+            'Location Description': 'first',
+            'Vehicle Count': 'sum',
+            'Event (Violation Count)': 'sum',
+            'Total Rejects (G+H+I+J+K+L)': 'sum',
+            'Non Events': 'sum',
+            'Controllable': 'sum',
+            'Uncontrollable': 'sum',
+            'PD Non Events': 'sum',
+            'PD Controllable': 'sum',
+            'PD Uncontrollable': 'sum',
+            'Events still in WF': 'sum',
+            'Total Docs Issued (O+P+Q)': 'sum',
+            'Citations Issued': 'sum',
+            'Nov Issued': 'sum',
+            'Warning Issued': 'sum'
+        }
+        dataframe['Date'] = start_date
+        return dataframe.groupby(dataframe['Location Code']).aggregate(agg)
+
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def _login(self) -> None:
         """
         Logs into the Axsis system, which is required to do anything with the API
@@ -142,7 +251,10 @@ class Axsis:
             'access_token': soup.find("input", {"name": "access_token"})["value"]
         }
 
-        self.session.post('https://webportal1.atsol.com/axsis.web/signin-oidc', headers=headers, data=data)
+        response = self.session.post('https://webportal1.atsol.com/axsis.web/signin-oidc', headers=headers, data=data)
+        soup = BeautifulSoup(response.content, "html.parser")
+        self.client_id = soup.find_all('input', id='clientId')[0]['value']
+        self.client_code = soup.find_all('input', id='clientCode')[0]['value']
 
         list_of_cookies = requests.utils.dict_from_cookiejar(self.session.cookies)
         for cookie_name in ['idsrv', 'idsrv.session', 'f5-axsisweb-lb-cookie', '_mvc3authcougar']:
@@ -150,30 +262,8 @@ class Axsis:
                 raise AssertionError("Cookie {} not in list of valid cookie: {}".format(
                     cookie_name, list_of_cookies.keys()))
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
-    def _get_client_id(self) -> None:
-        """
-        Gets the client id and client code associated with self.username and assigns them to those attributes
-        :return: None
-        """
-        if self.client_code and self.client_id:
-            # if we already have the values, then skip is
-            return
-
-        headers = {
-            'Accept': ACCEPT_HEADER,
-        }
-
-        response = self.session.get('https://webportal1.atsol.com/axsis.web/Account/Login', headers=headers)
-        soup = BeautifulSoup(response.content, "html.parser")
-        self.client_id = soup.find_all('input', id='clientId')[0]['value']
-        self.client_code = soup.find_all('input', id='clientCode')[0]['value']
-
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def _get_reports(self, name: str) -> Optional[int]:
         """
         Take the response to GetReports and get the required report number
@@ -185,7 +275,6 @@ class Axsis:
             'Accept': 'application/json, text/javascript, */*; q=0.01',
         }
 
-        self._get_client_id()
         params = (
             ('clientId', self.client_id),
             ('clientCode', self.client_code),
@@ -204,9 +293,8 @@ class Axsis:
 
         return None
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def get_reports_detail(self, report_name: str) -> Optional[ReportsDetailType]:
         """
         Gets the ReportsDetailType structure of the report details from AXSIS.
@@ -215,7 +303,6 @@ class Axsis:
         :return: List of dictionaries of the parameter definitions. If the report name isn't found, then return None.
         """
         logger.info("Getting report {}", report_name)
-        self._get_client_id()
         report_id = self._get_reports(report_name)
         params = (
             ('clientId', self.client_id),
@@ -234,7 +321,9 @@ class Axsis:
                                     headers=headers,
                                     params=params)
         ret: ReportsDetailType = cast(ReportsDetailType, self._pythonify_literal(response.content.decode()))
-        if ret.get('Message') and 'No HTTP resource was found that matches the request URI' in ret['Message']:
+        if ret.get('Message') and \
+                ('No HTTP resource was found that matches the request URI' in ret['Message'] or
+                 ('An error has occurred' in ret['Message'])):
             # We requested an invalid report name
             return None
         return ret
@@ -244,10 +333,14 @@ class Axsis:
         Gets the location information (address) of a camera based on its ID
         :param location_id: the location identifier of the camera (IE BAL101)
         """
-        report = self.get_reports_detail('LOCATION PERFORMANCE DETAIL')
-        for param_data in report.get('Parameters'):
-            if param_data.get('ParmDataType') == 'PICKLIST':
-                for param_list in param_data.get('ParmList'):
+        report: Optional[ReportsDetailType] = self.get_reports_detail('LOCATION PERFORMANCE DETAIL')
+        if report is None or report['Parameters'] is None:
+            logger.error('Unable to get location info')
+            return None
+
+        for param_data in report['Parameters']:
+            if param_data.get('ParmDataType') == 'PICKLIST' and param_data['ParmList'] is not None:
+                for param_list in param_data['ParmList']:
                     if param_list.get('Value') == location_id:
                         return param_list.get('Description').split(' - ')[1]
         return None

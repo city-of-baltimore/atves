@@ -1,9 +1,8 @@
 """Models used by sqlalchemy"""
 # pylint:disable=too-few-public-methods
 from sqlalchemy import Column, ForeignKey  # type: ignore
-from sqlalchemy.orm import relationship  # type: ignore
-from sqlalchemy.ext.declarative import DeclarativeMeta  # type: ignore
-from sqlalchemy.ext.declarative import declarative_base  # type: ignore
+from sqlalchemy.orm import declarative_base, relationship  # type: ignore
+from sqlalchemy.orm.decl_api import DeclarativeMeta  # type: ignore
 from sqlalchemy.types import Boolean, Date, DateTime, Integer, Numeric, String  # type: ignore
 
 Base: DeclarativeMeta = declarative_base()
@@ -18,26 +17,12 @@ class AtvesTrafficCounts(Base):
     count = Column(Integer)
 
 
-class AtvesTicketCameras(Base):
-    """Table holding the ticket counts for the red light and overheight cameras"""
-    __tablename__ = "atves_ticket_cameras"
-
-    id = Column(Integer, primary_key=True)
-    start_time = Column(DateTime, nullable=False)
-    end_time = Column(DateTime, nullable=False)
-    location = Column(String(length=100), ForeignKey('atves_cam_locations.locationdescription'), nullable=False)
-    officer = Column(String)
-    equip_type = Column(String(length=10), primary_key=True)
-    issued = Column(Integer, nullable=False)
-    rejected = Column(Integer, nullable=False)
-
-
 class AtvesCamLocations(Base):
     """The camera location database looks like this"""
     __tablename__ = "atves_cam_locations"
 
     location_code = Column(String(length=100), primary_key=True)
-    locationdescription = Column(String(length=100), nullable=False, unique=True)
+    locationdescription = Column(String(length=100), nullable=False)
     lat = Column(Numeric(precision=6, scale=4))
     long = Column(Numeric(precision=6, scale=4))
     cam_type = Column(String(length=2), nullable=False)
@@ -46,9 +31,7 @@ class AtvesCamLocations(Base):
     status = Column(Boolean)
 
     TrafficCounts = relationship('AtvesTrafficCounts')
-    TicketCameras = relationship('AtvesTicketCameras')
     AmberTimeRejects = relationship('AtvesAmberTimeRejects')
-    AtvesByLocation = relationship('AtvesByLocation')
 
 
 class AtvesAmberTimeRejects(Base):
@@ -63,39 +46,48 @@ class AtvesAmberTimeRejects(Base):
     event_number = Column(Integer, primary_key=True)
 
 
-class AtvesApprovalByReviewDateDetails(Base):
-    """get_approval_by_review_date_details (red light only)"""
-    __tablename__ = "atves_approval_by_review_date_details"
+class AtvesViolations(Base):
+    """Violation counts"""
+    __tablename__ = "atves_violations"
 
-    disapproved = Column(Integer, nullable=False)
-    approved = Column(Integer, nullable=False)
-    officer = Column(String(length=100))
-    citation_no = Column(String(length=20), primary_key=True)
-    violation_date = Column(DateTime)
-    review_status = Column(String(length=20))
-    review_datetime = Column(DateTime)
+    date = Column(Date)
+    location_code = Column(String(length=100), primary_key=True)
+    count = Column(Integer)
+    violation_cat = Column(Integer, ForeignKey('atves_violation_categories.violation_cat'), primary_key=True)
+    details = Column(String(length=100), primary_key=True)
 
 
-class AtvesByLocation(Base):
-    """get_client_summary_by_location"""
-    __tablename__ = "atves_by_location"
+class AtvesViolationCategories(Base):
+    """Lookup table for the violation_cat column in AtvesViolations"""
+    __tablename__ = "atves_violation_categories"
 
-    date = Column(Date, primary_key=True)
-    location_code = Column(String(length=100), ForeignKey('atves_cam_locations.location_code'), primary_key=True)
-    section = Column(String(length=20))
-    details = Column(String(length=100))
-    percentage_desc = Column(String(length=50))
-    issued = Column(Integer, nullable=False)
-    in_process = Column(Integer, nullable=False)
-    non_violations = Column(Integer, nullable=False)
-    controllable_rejects = Column(Integer, nullable=False)
-    uncontrollable_rejects = Column(Integer, nullable=False)
-    pending_initial_approval = Column(Integer, nullable=False)
-    pending_reject_approval = Column(Integer, nullable=False)
-    vcDescription = Column(String(length=100), primary_key=True)
-    detail_count = Column(Integer)
-    order_by = Column(Integer)
+    violation_cat = Column(Integer, primary_key=True)
+    description = Column(String(length=100))
 
+    AtvesViolations = relationship('AtvesViolations')
+
+
+class AtvesFinancial(Base):
+    """General ledger detail reports"""
+    __tablename__ = 'atves_financial'
+
+    journal_entry_no = Column(String(length=30), primary_key=True)
+    ledger_posting_date = Column(Date, nullable=False)
+    account_no = Column(String(length=50))
+    legacy_account_no = Column(String(length=50))
+    amount = Column(Numeric(precision=12, scale=2))
+    source_journal = Column(String(length=50))
+    trx_reference = Column(String(length=50))
+    TrxDescription = Column(String(length=255))
+    user_who_posted = Column(String(length=50))
+    trx_no = Column(String(length=50))
+    vendorid_or_customerid = Column(String(length=50))
+    vendor_or_customer_name = Column(String(length=100))
+    document_no = Column(String(length=50))
+    Trx_source = Column(String(length=50))
+    account_description = Column(String(length=255))
+    account_type = Column(String(length=50))
+    agency_or_category = Column(String(length=50))
 
 # Reports not yet being imported
 # get_approval_summary_by_queue

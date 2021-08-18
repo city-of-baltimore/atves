@@ -3,13 +3,13 @@ import calendar
 import re
 import urllib
 from datetime import date, datetime, timedelta
-from typing import Generator, List, Tuple
+from typing import Generator, List, Optional, Tuple
 
 import pandas as pd  # type: ignore
 import requests
 from bs4 import BeautifulSoup  # type: ignore
 from loguru import logger
-from retry import retry
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 
 from atves.conduent_types import CameraType, ConduentResultsType, SessionStateType
 
@@ -34,14 +34,13 @@ class Conduent:
                                               '__VIEWSTATEGENERATOR': None,
                                               '__EVENTVALIDATION': None
                                               }
-        self.deployment_server = None
-        self.session_id = None
+        self.deployment_server: Optional[str] = None
+        self.session_id: Optional[str] = None
 
         self._login(username, password)
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def _login(self, username, password) -> None:
         """ First step of sending username and password """
         payload = {
@@ -62,9 +61,8 @@ class Conduent:
         if len(soup.find_all('input', {'name': 'txtOTP'})) != 1:
             raise AssertionError("Login failure with Conduent")
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def login_otp(self, otp: str) -> None:
         """
         Logs in with the required one time password. This seems to not be required, but is left in incase they ever fix
@@ -121,9 +119,8 @@ class Conduent:
         self._state_vals['__VIEWSTATEGENERATOR'] = tags['__VIEWSTATEGENERATOR']
         self._state_vals['__EVENTVALIDATION'] = tags['__EVENTVALIDATION']
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def get_location_by_id(self, loc_id: int, cam_type: int) -> CameraType:
         """
         Gets camera information by location id. The id is <ID> in
@@ -190,9 +187,8 @@ class Conduent:
                 'status': results.group(8),
                 'cam_type': cam_type_str}
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def get_overheight_cameras(self) -> List[Tuple[int, str]]:
         """
         Get the list of overheight cameras
@@ -240,7 +236,7 @@ class Conduent:
     def get_amber_time_rejects_report(self,
                                       start_date: date,
                                       end_date: date,
-                                      location='999,All Locations') -> pd.core.frame.DataFrame:
+                                      location='999,All Locations') -> pd.DataFrame:
         """
         Downloads the amber time rejects report (red light only)
         :param start_date: Start date of the report to pull
@@ -254,10 +250,11 @@ class Conduent:
                                input_params={'TextBox0': start_date_str, 'TextBox1': end_date_str,
                                              'ComboBox0': location},
                                scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
-                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
+                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'],
+                               parse_dates=['VioDate'])
 
     def get_approval_by_review_date_details(self, start_date: date, end_date: date, cam_type: int,
-                                            location='999,All Locations') -> pd.core.frame.DataFrame:
+                                            location='999,All Locations') -> Optional[pd.DataFrame]:
         """
         Downloads the report detailing approval by review date
         :param cam_type: Camera type to query. Either conduent.OVERHEIGHT or conduent.REDLIGHT
@@ -275,15 +272,29 @@ class Conduent:
 
         start_date_str, end_date_str = self._convert_start_end_dates(start_date, end_date)
 
-        return self.get_report(report,
-                               cam_type,
-                               input_params={'TextBox0': start_date_str, 'TextBox1': end_date_str,
-                                             'ComboBox0': location},
-                               scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
-                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
+        ret = self.get_report(report,
+                              cam_type,
+                              input_params={'TextBox0': start_date_str, 'TextBox1': end_date_str,
+                                            'ComboBox0': location},
+                              scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
+                                             'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
+        if ret is None:
+            return None
+
+        ret['Vio Date'] = pd.to_datetime(ret['Vio Date'], format='%b %d %Y %I:%M%p').dt.date
+        ret['Review Status'] = ret['Review Status'].str.strip()
+
+        agg = {
+            'Disapproved': 'sum',
+            'Approved': 'sum'
+        }
+
+        ret = ret.groupby(['Vio Date', 'Review Status']).agg(agg).reset_index()
+
+        return ret
 
     def get_approval_summary_by_queue(self, start_date: date, end_date: date, cam_type: int,
-                                      location='999,All Locations') -> pd.core.frame.DataFrame:
+                                      location='999,All Locations') -> pd.DataFrame:
         """
         Downloads the approval summary by queue report
         :param cam_type: Camera type to query. Either conduent.OVERHEIGHT or conduent.REDLIGHT
@@ -307,20 +318,26 @@ class Conduent:
                                input_params={'TextBox0': start_date_str, 'TextBox1': end_date_str,
                                              'ComboBox0': location},
                                scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
-                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
+                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'],
+                               parse_dates=['Review Date'])
 
-    def get_client_summary_by_location(self, start_date: date, end_date: date, cam_type: int,
-                                       location='999,All Locations') -> pd.core.frame.DataFrame:
+    def get_client_summary_by_location(self, start_date: date, end_date: date, cam_type: int = ALLCAMS,
+                                       location='999,All Locations') -> pd.DataFrame:
         """
         Downloads the client summary by location
-        :param cam_type: Camera type to query. Either conduent.OVERHEIGHT or conduent.REDLIGHT
+        :param cam_type: Camera type to query. Either conduent.OVERHEIGHT, conduent.REDLIGHT, or conduent.ALLCAMS
         :param start_date: Start date of the report to pull
         :param end_date: End date of the report to pull
         :param location: Optional location search. Uses the codes from the website
         :return: pandas.core.frame.DataFrame
         """
-        if cam_type not in [REDLIGHT, OVERHEIGHT]:
+        if cam_type not in [REDLIGHT, OVERHEIGHT, ALLCAMS]:
             raise AssertionError("Cam type {} is unexpected".format(cam_type))
+
+        if cam_type == ALLCAMS:
+            rep_rl = self.get_client_summary_by_location(start_date, end_date, cam_type=REDLIGHT)
+            rep_oh = self.get_client_summary_by_location(start_date, end_date, cam_type=OVERHEIGHT)
+            return pd.concat([rep_rl, rep_oh])
 
         if cam_type == REDLIGHT:
             report = '5608,302,Client Summary By Location,1,false,true'
@@ -341,7 +358,7 @@ class Conduent:
                                    scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
                                                   'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
             if data is not None:
-                data['Date'] = working_date.strftime("%m/%d/%y")
+                data['Date'] = working_date
                 ret = pd.concat([ret, data]) if ret is not None else data
             working_date += timedelta(days=1)
         return ret
@@ -349,7 +366,7 @@ class Conduent:
     def get_expired_by_location(self,
                                 start_date: date,
                                 end_date: date,
-                                location='999,All Locations') -> pd.core.frame.DataFrame:
+                                location='999,All Locations') -> pd.DataFrame:
         """
         Downloads the 'expired by location' report (redlight cameras only)
         :param start_date: Start date of the report to pull
@@ -367,7 +384,7 @@ class Conduent:
 
     def get_in_city_vs_out_of_city(self,
                                    start_date: date,
-                                   end_date: date) -> pd.core.frame.DataFrame:
+                                   end_date: date) -> pd.DataFrame:
         """
         Downloads the 'in city vs out of city' report (red light cameras only)
         :param start_date: Start date of the report to pull
@@ -384,7 +401,7 @@ class Conduent:
     def get_straight_thru_vs_right_turn(self,
                                         start_date: date,
                                         end_date: date,
-                                        location='999,All Locations') -> pd.core.frame.DataFrame:
+                                        location='999,All Locations') -> pd.DataFrame:
         """
         Downloads the 'straight thru vs right turn' report (red light cameras only)
         :param start_date: Start date of the report to pull
@@ -398,12 +415,13 @@ class Conduent:
                                input_params={'TextBox0': start_date_str, 'TextBox1': end_date_str,
                                              'ComboBox0': location},
                                scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
-                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
+                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'],
+                               parse_dates=['Violation Date'])
 
     def get_traffic_counts_by_location(self,
                                        start_date: date,
                                        end_date: date,
-                                       location='999,All Locations') -> pd.core.frame.DataFrame:
+                                       location='999,All Locations') -> pd.DataFrame:
         """
         Downloads the 'traffic count by location' report (red light cameras only)
         :param start_date: Start date of the report to pull
@@ -417,11 +435,12 @@ class Conduent:
                                input_params={'TextBox0': start_date_str, 'TextBox1': end_date_str,
                                              'ComboBox0': location},
                                scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
-                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
+                                              'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'],
+                               parse_dates=['Ddate'])
 
     def get_violations_issued_by_location(self,
                                           start_date: date,
-                                          end_date: date) -> pd.core.frame.DataFrame:
+                                          end_date: date) -> pd.DataFrame:
         """
         Downloads the 'violations issued by location' report (red light cameras only)
         :param start_date: Start date of the report to pull
@@ -437,7 +456,7 @@ class Conduent:
 
     def get_daily_self_test(self,
                             start_date: date,
-                            end_date: date) -> pd.core.frame.DataFrame:
+                            end_date: date) -> pd.DataFrame:
         """
         Downloads the daily self test report (overheight cameras only)
         :param start_date: Start date of the report to pull
@@ -449,9 +468,10 @@ class Conduent:
                                OVERHEIGHT,
                                input_params={'TextBox0': start_date_str, 'TextBox1': end_date_str},
                                scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hTextBoxCount',
-                                              'hComboBoxCount'])
+                                              'hComboBoxCount'],
+                               parse_dates=['TestDate'])
 
-    def get_pending_client_approval(self, cam_type: int) -> pd.core.frame.DataFrame:
+    def get_pending_client_approval(self, cam_type: int) -> pd.DataFrame:
         """
         Downloads the pending client approval report (overheight cameras only)
         :return: pandas.core.frame.DataFrame
@@ -465,10 +485,10 @@ class Conduent:
             report = '5579,307,Pending Client Approval,1,false,true'
         return self.get_report(report, OVERHEIGHT)
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
-    def get_report(self, report_type, cam_type, input_params=None, scrape_params=None) -> pd.core.frame.DataFrame:
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
+    def get_report(self, report_type, cam_type, input_params=None,  # pylint:disable=too-many-arguments,too-many-locals
+                   scrape_params=None, parse_dates=None) -> Optional[pd.DataFrame]:
         """
         Pulls the specified report
         :param report_type: Report type, which is the same as what is posted to univReport.asp
@@ -478,6 +498,7 @@ class Conduent:
         :param scrape_params: (list) Parameters that are defined internally to citeweb, and need to be scraped from
         univReport. The parameters will be scraped from the tags as '<input NAME=VALUE...', and will be submitted to
         citeweb in the form of name:value
+        :param parse_dates: Directly passed to read_csv. See the documentation for pandas.read_csv
         :return: Report data
         """
         if cam_type == REDLIGHT:
@@ -549,7 +570,7 @@ class Conduent:
             return None
 
         # download the file and return it
-        return pd.read_csv('https://cw3.cite-web.com{}'.format(onclick.group(0)))
+        return pd.read_csv('https://cw3.cite-web.com{}'.format(onclick.group(0)), parse_dates=parse_dates)
 
     def _get_deployment_server(self, resp: requests.Response) -> None:
         """
@@ -567,9 +588,8 @@ class Conduent:
             if self.deployment_server is not None:
                 break
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def _setup_report_request(self, cam_type: int) -> None:
         """
         This is mainly about requesting pages in the right order, to simulate someone using a browser
@@ -599,9 +619,8 @@ class Conduent:
         self.session.cookies.set('DB', None)
         self.session.cookies.set('DB', cookie_val)
 
-    @retry(exceptions=requests.exceptions.ConnectionError,
-           tries=10,
-           delay=10)
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
     def _get_deployment_data(self, search_start_date: date, search_end_date: date,
                              cam_type) -> List[ConduentResultsType]:
         """ Pull the data from the deployment section"""
