@@ -11,13 +11,11 @@ from typing import Optional
 
 from arcgis.geocoding import geocode  # type: ignore
 from arcgis.gis import GIS  # type: ignore
+from databasebaseclass.base import DatabaseBaseClass
 from loguru import logger
-from sqlalchemy import create_engine, event, inspect as sqlalchemyinspect  # type: ignore
+from sqlalchemy import create_engine, event  # type: ignore
 from sqlalchemy.engine import Engine  # type: ignore
-from sqlalchemy.exc import IntegrityError  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
-from sqlalchemy.orm.decl_api import DeclarativeMeta  # type: ignore
-from sqlalchemy.sql import text  # type: ignore
 
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFinancial, AtvesTrafficCounts, \
     AtvesViolations, AtvesViolationCategories, Base
@@ -54,7 +52,7 @@ VIOLATION_TYPES = {
 }
 
 
-class AtvesDatabase:
+class AtvesDatabase(DatabaseBaseClass):
     """ Helper class for the Conduent and Axsis classes that inserts data into the relevant databases"""
 
     def __init__(self, conn_str: str, axsis_user: Optional[str] = AXSIS_USERNAME,  # pylint:disable=too-many-arguments
@@ -234,19 +232,20 @@ class AtvesDatabase:
             return
 
         self.build_location_db()
-        data = self.conduent_interface.get_amber_time_rejects_report(start_date, end_date)
+        dates = self.get_dates_to_process(start_date, end_date, AtvesAmberTimeRejects.violation_date)
+        for working_date in dates:
+            if (data := self.conduent_interface.get_amber_time_rejects_report(working_date, working_date)).empty:
+                # no data
+                return
 
-        if data.empty:
-            return
-
-        for _, row in data.iterrows():
-            self._insert_or_update(AtvesAmberTimeRejects(
-                location_code=int(row['iLocationCode']),
-                deployment_no=int(row['Deployment Number']),
-                violation_date=row['VioDate'],
-                amber_time=float(row['Amber Time']),
-                amber_reject_code=str(row['Amber Reject Code']),
-                event_number=int(row['Event Number'])))
+            for _, row in data.iterrows():
+                self._insert_or_update(AtvesAmberTimeRejects(
+                    location_code=int(row['iLocationCode']),
+                    deployment_no=int(row['Deployment Number']),
+                    violation_date=row['VioDate'],
+                    amber_time=float(row['Amber Time']),
+                    amber_reject_code=str(row['Amber Reject Code']),
+                    event_number=int(row['Event Number'])))
 
     def process_conduent_data_by_location(self, start_date: date, end_date: date, cam_type: int = ALLCAMS) -> None:
         """
@@ -284,21 +283,22 @@ class AtvesDatabase:
 
         logger.info('Processing conduent location data reports from {} to {}', start_date.strftime('%m/%d/%y'),
                     end_date.strftime('%m/%d/%y'))
-        data = self.conduent_interface.get_client_summary_by_location(start_date, end_date, cam_type)
 
-        if data.empty:
-            return
+        dates = self.get_dates_to_process(start_date, end_date, AtvesViolations.date)
+        for working_date in dates:
+            if (data := self.conduent_interface.get_client_summary_by_location(working_date, working_date)).empty:
+                # no data
+                return
 
-        for _, row in data.iterrows():
-            location_id = _get_int(row['Locations'])
-            if location_id == 0:
-                continue
-            self._insert_or_update(AtvesViolations(date=row['Date'],
-                                                   location_code=location_id,
-                                                   count=int(row['DetailCount']),
-                                                   violation_cat=_get_int(row['iOrderBy']),
-                                                   details=str(row['vcDescription']))
-                                   )
+            for _, row in data.iterrows():
+                location_id = _get_int(row['Locations'])
+                if location_id == 0:
+                    continue
+                self._insert_or_update(AtvesViolations(date=row['Date'],
+                                                       location_code=location_id,
+                                                       count=int(row['DetailCount']),
+                                                       violation_cat=_get_int(row['iOrderBy']),
+                                                       details=str(row['vcDescription'])))
 
     def process_traffic_count_data(self, start_date: date, end_date: date) -> None:
         """
@@ -320,28 +320,22 @@ class AtvesDatabase:
                            'setup.')
             return
 
-        # Get data from speed cameras. There are issues pulling more than 90 days of data, so we split if its larger
-        tmp_end_date = start_date + timedelta(days=90) if (end_date - start_date).days > 90 else end_date
-        tmp_start_date = start_date
+        dates = self.get_dates_to_process(start_date, end_date, AtvesTrafficCounts.date)
+        for working_date in dates:
+            if (data := self.axsis_interface.get_traffic_counts(working_date, working_date)).empty:
+                # no data
+                return
 
-        while True:
-            axsis_data = self.axsis_interface.get_traffic_counts(tmp_start_date, tmp_end_date)
-            axsis_data = axsis_data.to_dict('index')
-            columns = axsis_data[0].keys() - ['Location code', 'Description', 'First Traf Evt', 'Last Traf Evt']
+            data = data.to_dict('index')
+            columns = data[0].keys() - ['Location code', 'Description', 'First Traf Evt', 'Last Traf Evt']
 
-            for row in axsis_data.values():
+            for row in data.values():
                 for event_date in columns:
                     if not math.isnan(row[event_date]):
                         self._insert_or_update(AtvesTrafficCounts(location_code=str(row['Location code']).strip(),
                                                                   date=datetime.strptime(event_date,
                                                                                          '%m/%d/%Y').date(),
                                                                   count=int(row[event_date])))
-            tmp_start_date = tmp_start_date + timedelta(days=91)
-            if tmp_start_date > end_date:
-                break
-
-            # chunk the date range, unless we hit the end_date
-            tmp_end_date = min(tmp_start_date + timedelta(days=90), end_date)
 
     def _process_traffic_count_data_conduent(self, start_date: date, end_date: date) -> None:
         if not self.conduent_interface:
@@ -349,12 +343,16 @@ class AtvesDatabase:
                            'session, which is not setup.')
             return
 
-        # Get data from red light cameras
-        conduent_data = self.conduent_interface.get_traffic_counts_by_location(start_date, end_date)
-        for _, row in conduent_data.iterrows():
-            self._insert_or_update(AtvesTrafficCounts(location_code=str(row['iLocationCode']).strip(),
-                                                      date=row['Ddate'],
-                                                      count=int(row['VehPass'])))
+        dates = self.get_dates_to_process(start_date, end_date, AtvesTrafficCounts.date)
+        for working_date in dates:
+            if (data := self.conduent_interface.get_traffic_counts_by_location(working_date, working_date)).empty:
+                # no data
+                return
+
+            for _, row in data.iterrows():
+                self._insert_or_update(AtvesTrafficCounts(location_code=str(row['iLocationCode']).strip(),
+                                                          date=row['Ddate'],
+                                                          count=int(row['VehPass'])))
 
     def process_violations(self, start_date: date, end_date: date) -> None:
         """
@@ -377,17 +375,28 @@ class AtvesDatabase:
                            'setup.')
             return
 
-        axsis_data = self.axsis_interface.get_location_summary_by_lane(start_date, end_date)
-        for _, row in axsis_data.iterrows():
-            for code, desc in ((1, 'Events still in WF'), (2, 'Non Events'), (2, 'PD Non Events'), (3, 'Controllable'),
-                               (3, 'PD Controllable'), (4, 'Uncontrollable'), (4, 'PD Uncontrollable'),
-                               (5, 'Citations Issued'), (5, 'Nov Issued'), (5, 'Warning Issued')):
-                self._insert_or_update(AtvesViolations(date=row['Date'],
-                                                       location_code=row['Location Code'],
-                                                       count=row[desc],
-                                                       violation_cat=code,
-                                                       details=desc)
-                                       )
+        dates = self.get_dates_to_process(start_date, end_date, AtvesViolations.date)
+        for working_date in dates:
+            if (data := self.axsis_interface.get_location_summary_by_lane(working_date, working_date)).empty:
+                # no data
+                return
+
+            for _, row in data.iterrows():
+                for code, desc in ((1, 'Events still in WF'),
+                                   (2, 'Non Events'),
+                                   (2, 'PD Non Events'),
+                                   (3, 'Controllable'),
+                                   (3, 'PD Controllable'),
+                                   (4, 'Uncontrollable'),
+                                   (4, 'PD Uncontrollable'),
+                                   (5, 'Citations Issued'),
+                                   (5, 'Nov Issued'),
+                                   (5, 'Warning Issued')):
+                    self._insert_or_update(AtvesViolations(date=row['Date'],
+                                                           location_code=row['Location Code'],
+                                                           count=row[desc],
+                                                           violation_cat=code,
+                                                           details=desc))
 
     def _process_violations_conduent(self, start_date: date, end_date: date) -> None:
         violation_lookup = {
@@ -403,14 +412,17 @@ class AtvesDatabase:
                            'session, which is not setup.')
             return
 
-        conduent_data = self.conduent_interface.get_client_summary_by_location(start_date, end_date)
-        for _, row in conduent_data.iterrows():
-            self._insert_or_update(AtvesViolations(date=row['Date'],
-                                                   location_code=row['Locations'],
-                                                   count=row['DetailCount'],
-                                                   violation_cat=violation_lookup[row['iOrderBy']],
-                                                   details=row['vcDescription'])
-                                   )
+        dates = self.get_dates_to_process(start_date, end_date, AtvesViolations.date)
+        for working_date in dates:
+            if (data := self.conduent_interface.get_client_summary_by_location(working_date, working_date)).empty:
+                # no data
+                return
+            for _, row in data.iterrows():
+                self._insert_or_update(AtvesViolations(date=row['Date'],
+                                                       location_code=row['Locations'],
+                                                       count=row['DetailCount'],
+                                                       violation_cat=violation_lookup[row['iOrderBy']],
+                                                       details=row['vcDescription']))
 
     def process_overheight_financials(self, start_date: date, end_date: date):
         """
@@ -457,83 +469,31 @@ class AtvesDatabase:
             logger.warning('Unable to insert financial data. It requires a reports session, which is not setup.')
             return
 
-        ret = self.financial_interface.get_general_ledger_detail(start_date, end_date, account, '55')
-        for _, row in ret.iterrows():
-            self._insert_or_update(AtvesFinancial(
-                journal_entry_no=row['JournalEntryNo'],
-                ledger_posting_date=row['LedgerPostingDate'],
-                account_no=row['AccountNo'],
-                legacy_account_no=row['LegacyAccountNo'],
-                amount=row['Amount'],
-                source_journal=row['SourceJournal'],
-                trx_reference=row['TrxReference'],
-                TrxDescription=row['TrxDescription'],
-                user_who_posted=row['UserWhoPosted'],
-                trx_no=row['TrxNo'],
-                vendorid_or_customerid=row['VendorIDOrCustomerID'],
-                vendor_or_customer_name=row['VendorOrCustomerName'],
-                document_no=row['DocumentNo'],
-                Trx_source=row['TrxSource'],
-                account_description=row['AccountDescription'],
-                account_type=row['AccountType'],
-                agency_or_category=row['AgencyOrCategory']
-            ))
-
-    def _insert_or_update(self, insert_obj: DeclarativeMeta, identity_insert=False) -> None:
-        """
-        A safe way for the sqlalchemy to insert if the record doesn't exist, or update if it does. Copied from
-        trafficstat.crash_data_ingester
-        :param insert_obj:
-        :param identity_insert:
-        :return:
-        """
-        session = Session(bind=self.engine, future=True)
-        if identity_insert:
-            session.execute(text('SET IDENTITY_INSERT {} ON'.format(insert_obj.__tablename__)))
-
-        session.add(insert_obj)
-        try:
-            session.commit()
-            logger.debug('Successfully inserted object: {}', insert_obj)
-        except IntegrityError as insert_err:
-            session.rollback()
-
-            if '(544)' in insert_err.args[0]:
-                # This is a workaround for an issue with sqlalchemy not properly setting IDENTITY_INSERT on for SQL
-                # Server before we insert values in the primary key. The error is:
-                # (pyodbc.IntegrityError) ('23000', "[23000] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]
-                # Cannot insert explicit value for identity column in table <table name> when IDENTITY_INSERT is set to
-                # OFF. (544) (SQLExecDirectW)")
-                self._insert_or_update(insert_obj, True)
-
-            elif '(2627)' in insert_err.args[0] or 'UNIQUE constraint failed' in insert_err.args[0]:
-                # Error 2627 is the Sql Server error for inserting when the primary key already exists. 'UNIQUE
-                # constraint failed' is the same for Sqlite
-                cls_type = type(insert_obj)
-
-                qry = session.query(cls_type)
-
-                primary_keys = [i.key for i in sqlalchemyinspect(cls_type).primary_key]
-                for primary_key in primary_keys:
-                    qry = qry.filter(cls_type.__dict__[primary_key] == insert_obj.__dict__[primary_key])
-
-                update_vals = {k: v for k, v in insert_obj.__dict__.items()
-                               if not k.startswith('_') and k not in primary_keys}
-                if update_vals:
-                    qry.update(update_vals)
-                    try:
-                        session.commit()
-                        logger.debug('Successfully inserted object: {}', insert_obj)
-                    except IntegrityError as update_err:
-                        logger.error('Unable to insert object: {}\nError: {}', insert_obj, update_err)
-
-            else:
-                raise AssertionError('Expected error 2627 or "UNIQUE constraint failed". Got {}'.format(insert_err)) \
-                    from insert_err
-        finally:
-            if identity_insert:
-                session.execute(text('SET IDENTITY_INSERT {} OFF'.format(insert_obj.__tablename__)))
-            session.close()
+        dates = self.get_dates_to_process(start_date, end_date, AtvesFinancial.ledger_posting_date)
+        for working_date in dates:
+            if (data := self.financial_interface.get_general_ledger_detail(working_date, working_date, account, '55'))\
+                    .empty:
+                # no data
+                return
+            for _, row in data.iterrows():
+                self._insert_or_update(AtvesFinancial(
+                    journal_entry_no=row['JournalEntryNo'],
+                    ledger_posting_date=row['LedgerPostingDate'],
+                    account_no=row['AccountNo'],
+                    legacy_account_no=row['LegacyAccountNo'],
+                    amount=row['Amount'],
+                    source_journal=row['SourceJournal'],
+                    trx_reference=row['TrxReference'],
+                    TrxDescription=row['TrxDescription'],
+                    user_who_posted=row['UserWhoPosted'],
+                    trx_no=row['TrxNo'],
+                    vendorid_or_customerid=row['VendorIDOrCustomerID'],
+                    vendor_or_customer_name=row['VendorOrCustomerName'],
+                    document_no=row['DocumentNo'],
+                    Trx_source=row['TrxSource'],
+                    account_description=row['AccountDescription'],
+                    account_type=row['AccountType'],
+                    agency_or_category=row['AgencyOrCategory']))
 
     def get_lat_long(self, address):
         """
@@ -613,16 +573,20 @@ def parse_args(_args):
     start_date = date.today() - timedelta(days=365)
     end_date = date.today() - timedelta(days=1)
     parser.add_argument('-s', '--startdate', type=date.fromisoformat, default=start_date,
-                        help='First date to process, inclusive (format YYYY-MM-DD).')
+                        help='First date to process, inclusive (format YYYY-MM-DD). Defaults to 365 days ago')
     parser.add_argument('-e', '--enddate', type=date.fromisoformat, default=end_date,
-                        help='Last date to process, inclusive (format YYYY-MM-DD).')
-    parser.add_argument('-a', '--allcams', action='store_true', help='Process all camera types')
+                        help='Last date to process, inclusive (format YYYY-MM-DD). Defaults to yesterday.')
+    parser.add_argument('-a', '--allcams', action='store_true', help='Process all camera types. If this is set, then '
+                                                                     '-o, -r, -t, and -p are ignored.')
     parser.add_argument('-o', '--oh', action='store_true', help='Process over height cameras')
     parser.add_argument('-r', '--rl', action='store_true', help='Process red light cameras')
     parser.add_argument('-t', '--tc', action='store_true', help='Process traffic counts')
     parser.add_argument('-p', '--sc', action='store_true', help='Process speed cameras')
     parser.add_argument('-b', '--builddb', action='store_true',
                         help='Rebuilds (or updates) the camera location database')
+    parser.add_argument('-f', '--force', action='store_true', help='By default, this will only pull data for dates that'
+                                                                   ' have no data in the database. This will force it '
+                                                                   'to pull all data again.')
 
     return parser.parse_args(_args)
 

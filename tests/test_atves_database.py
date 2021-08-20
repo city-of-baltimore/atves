@@ -234,7 +234,7 @@ def test_parse_args():
     end_date_str = '2021-07-21'
     end_date = date(2021, 7, 21)
     args = parse_args(['-v', '-c', conn_str, '-s', start_date_str, '-e', end_date_str, '-a', '-o', '-r', '-t', '-p',
-                       '-b'])
+                       '-b', '-f'])
     assert args.verbose
     assert not args.debug
     assert args.conn_str == conn_str
@@ -246,3 +246,4 @@ def test_parse_args():
     assert args.tc
     assert args.sc
     assert args.builddb
+    assert args.force
