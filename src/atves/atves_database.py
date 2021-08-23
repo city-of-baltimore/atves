@@ -366,8 +366,11 @@ class AtvesDatabase(DatabaseBaseClass):
 
         self.build_location_db()
         self.build_violation_lookup_db()
-        self._process_violations_axsis(start_date, end_date)
-        self._process_violations_conduent(start_date, end_date)
+
+        dates = self.get_dates_to_process(start_date, end_date, AtvesViolations.date)
+        for working_date in dates:
+            self._process_violations_axsis(working_date, working_date)
+            self._process_violations_conduent(working_date, working_date)
 
     def _process_violations_axsis(self, start_date: date, end_date: date) -> None:
         if not self.axsis_interface:
@@ -375,28 +378,26 @@ class AtvesDatabase(DatabaseBaseClass):
                            'setup.')
             return
 
-        dates = self.get_dates_to_process(start_date, end_date, AtvesViolations.date)
-        for working_date in dates:
-            if (data := self.axsis_interface.get_location_summary_by_lane(working_date, working_date)).empty:
-                # no data
-                return
+        if (data := self.axsis_interface.get_location_summary_by_lane(start_date, end_date)).empty:
+            # no data
+            return
 
-            for _, row in data.iterrows():
-                for code, desc in ((1, 'Events still in WF'),
-                                   (2, 'Non Events'),
-                                   (2, 'PD Non Events'),
-                                   (3, 'Controllable'),
-                                   (3, 'PD Controllable'),
-                                   (4, 'Uncontrollable'),
-                                   (4, 'PD Uncontrollable'),
-                                   (5, 'Citations Issued'),
-                                   (5, 'Nov Issued'),
-                                   (5, 'Warning Issued')):
-                    self._insert_or_update(AtvesViolations(date=row['Date'],
-                                                           location_code=row['Location Code'],
-                                                           count=row[desc],
-                                                           violation_cat=code,
-                                                           details=desc))
+        for _, row in data.iterrows():
+            for code, desc in ((1, 'Events still in WF'),
+                               (2, 'Non Events'),
+                               (2, 'PD Non Events'),
+                               (3, 'Controllable'),
+                               (3, 'PD Controllable'),
+                               (4, 'Uncontrollable'),
+                               (4, 'PD Uncontrollable'),
+                               (5, 'Citations Issued'),
+                               (5, 'Nov Issued'),
+                               (5, 'Warning Issued')):
+                self._insert_or_update(AtvesViolations(date=row['Date'],
+                                                       location_code=row['Location Code'],
+                                                       count=row[desc],
+                                                       violation_cat=code,
+                                                       details=desc))
 
     def _process_violations_conduent(self, start_date: date, end_date: date) -> None:
         violation_lookup = {
@@ -412,17 +413,15 @@ class AtvesDatabase(DatabaseBaseClass):
                            'session, which is not setup.')
             return
 
-        dates = self.get_dates_to_process(start_date, end_date, AtvesViolations.date)
-        for working_date in dates:
-            if (data := self.conduent_interface.get_client_summary_by_location(working_date, working_date)).empty:
-                # no data
-                return
-            for _, row in data.iterrows():
-                self._insert_or_update(AtvesViolations(date=row['Date'],
-                                                       location_code=row['Locations'],
-                                                       count=row['DetailCount'],
-                                                       violation_cat=violation_lookup[row['iOrderBy']],
-                                                       details=row['vcDescription']))
+        if (data := self.conduent_interface.get_client_summary_by_location(start_date, end_date)).empty:
+            # no data
+            return
+        for _, row in data.iterrows():
+            self._insert_or_update(AtvesViolations(date=row['Date'],
+                                                   location_code=row['Locations'],
+                                                   count=row['DetailCount'],
+                                                   violation_cat=violation_lookup[row['iOrderBy']],
+                                                   details=row['vcDescription']))
 
     def process_overheight_financials(self, start_date: date, end_date: date):
         """
