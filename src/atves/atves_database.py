@@ -17,10 +17,11 @@ from sqlalchemy import create_engine, event  # type: ignore
 from sqlalchemy.engine import Engine  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 
+from atves import ALLCAMS, REDLIGHT, OVERHEIGHT, SPEED
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFinancial, AtvesTrafficCounts, \
     AtvesViolations, AtvesViolationCategories, Base
 from atves.axsis import Axsis
-from atves.conduent import Conduent, ALLCAMS, REDLIGHT, OVERHEIGHT
+from atves.conduent import Conduent
 from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDUENT_PASSWORD, REPORT_USERNAME, \
     REPORT_PASSWORD
 from atves.financial import CobReports
@@ -247,59 +248,6 @@ class AtvesDatabase(DatabaseBaseClass):
                     amber_reject_code=str(row['Amber Reject Code']),
                     event_number=int(row['Event Number'])))
 
-    def process_conduent_data_by_location(self, start_date: date, end_date: date, cam_type: int = ALLCAMS) -> None:
-        """
-
-        :param cam_type: Either conduent.REDLIGHT or conduent.OVERHEIGHT
-        :param start_date: Start date of the report to pull
-        :param end_date: End date of the report to pull
-        :return:
-        """
-        if not self.conduent_interface:
-            logger.warning('Unable to run process_conduent_data_by_location. It requires a Conduent '
-                           'session, which is not setup.')
-            return
-
-        self.build_location_db()
-        self.build_violation_lookup_db()
-
-        if cam_type == ALLCAMS:
-            self.process_conduent_data_by_location(start_date, end_date, REDLIGHT)
-            self.process_conduent_data_by_location(start_date, end_date, OVERHEIGHT)
-            return
-
-        def _get_int(value) -> int:
-            """Gets int on the front of the string"""
-            pattern = re.compile(r'(\d*)')
-            ret = 0
-            if value != 'All Locations':
-                match = pattern.match(value)
-                if match is None or match.lastindex is None or match.lastindex < 1:
-                    logger.error('Unable to parse location {}', value)
-                    ret = 0
-                else:
-                    ret = int(match.group(1))
-            return ret
-
-        logger.info('Processing conduent location data reports from {} to {}', start_date.strftime('%m/%d/%y'),
-                    end_date.strftime('%m/%d/%y'))
-
-        dates = self.get_dates_to_process(start_date, end_date, AtvesViolations.date)
-        for working_date in dates:
-            if (data := self.conduent_interface.get_client_summary_by_location(working_date, working_date)).empty:
-                # no data
-                return
-
-            for _, row in data.iterrows():
-                location_id = _get_int(row['Locations'])
-                if location_id == 0:
-                    continue
-                self._insert_or_update(AtvesViolations(date=row['Date'],
-                                                       location_code=location_id,
-                                                       count=int(row['DetailCount']),
-                                                       violation_cat=_get_int(row['iOrderBy']),
-                                                       details=str(row['vcDescription'])))
-
     def process_traffic_count_data(self, start_date: date, end_date: date) -> None:
         """
         Processes the traffic count camera data from Axsis and Conduent
@@ -356,7 +304,7 @@ class AtvesDatabase(DatabaseBaseClass):
 
     def process_violations(self, start_date: date, end_date: date) -> None:
         """
-        Processes the traffic count camera data from Axsis and Conduent
+        Processes the camera violations from Axsis and Conduent
         :param start_date: Start date of the report to pull
         :param end_date: End date of the report to pull
         :return:
@@ -399,7 +347,27 @@ class AtvesDatabase(DatabaseBaseClass):
                                                        violation_cat=code,
                                                        details=desc))
 
-    def _process_violations_conduent(self, start_date: date, end_date: date) -> None:
+    def _process_violations_conduent(self, start_date: date, end_date: date, cam_type: int = ALLCAMS) -> None:
+        """
+
+        :param cam_type: Either conduent.REDLIGHT or conduent.OVERHEIGHT
+        :param start_date: Start date of the report to pull
+        :param end_date: End date of the report to pull
+        :return:
+        """
+        def _get_int(value) -> int:
+            """Gets int on the front of the string"""
+            pattern = re.compile(r'(\d*)')
+            ret = 0
+            if value != 'All Locations':
+                match = pattern.match(value)
+                if match is None or match.lastindex is None or match.lastindex < 1:
+                    logger.error('Unable to parse location {}', value)
+                    ret = 0
+                else:
+                    ret = int(match.group(1))
+            return ret
+
         violation_lookup = {
             '1- In Process': 1,
             '2- Conduent/City Non Violations': 2,
@@ -413,17 +381,46 @@ class AtvesDatabase(DatabaseBaseClass):
                            'session, which is not setup.')
             return
 
+        if cam_type == ALLCAMS:
+            self._process_violations_conduent(start_date, end_date, REDLIGHT)
+            self._process_violations_conduent(start_date, end_date, OVERHEIGHT)
+            return
+
+        logger.info('Processing conduent location data reports from {} to {}', start_date.strftime('%m/%d/%y'),
+                    end_date.strftime('%m/%d/%y'))
+
         if (data := self.conduent_interface.get_client_summary_by_location(start_date, end_date)).empty:
             # no data
             return
         for _, row in data.iterrows():
+            location_id = _get_int(row['Locations'])
+            if location_id == 0:
+                continue
             self._insert_or_update(AtvesViolations(date=row['Date'],
-                                                   location_code=row['Locations'],
-                                                   count=row['DetailCount'],
+                                                   location_code=location_id,
+                                                   count=int(row['DetailCount']),
                                                    violation_cat=violation_lookup[row['iOrderBy']],
-                                                   details=row['vcDescription']))
+                                                   details=str(row['vcDescription'])))
 
-    def process_overheight_financials(self, start_date: date, end_date: date):
+    def process_financials(self, start_date: date, end_date: date, cam_type: int = ALLCAMS) -> None:
+        """
+        Get the financial data for the ATVES program
+        :param start_date: First date (inclusive) to process
+        :param end_date: Last date (inclusive) to process
+        :param cam_type:
+        """
+        dates = self.get_dates_to_process(start_date, end_date, AtvesFinancial.ledger_posting_date)
+        for working_date in dates:
+            if cam_type in [ALLCAMS, OVERHEIGHT]:
+                self._process_overheight_financials(working_date, working_date)
+
+            if cam_type in [ALLCAMS, REDLIGHT]:
+                self._process_redlight_financials(working_date, working_date)
+
+            if cam_type in [ALLCAMS, SPEED]:
+                self._process_speed_financials(working_date, working_date)
+
+    def _process_overheight_financials(self, start_date: date, end_date: date) -> None:
         """
         Get the data related to the overheight automated enforcement program and put it in the database
         Accounts: 1001-000000-2030-794100-403752 Commercial Truck Enforcement
@@ -432,7 +429,7 @@ class AtvesDatabase(DatabaseBaseClass):
         """
         self._insert_financials_by_account('10010000002030794100403752', start_date, end_date)
 
-    def process_redlight_financials(self, start_date: date, end_date: date):
+    def _process_redlight_financials(self, start_date: date, end_date: date) -> None:
         """
         Get the data related to the redlight automated enforcement program and put it in the database
         Accounts:
@@ -448,7 +445,7 @@ class AtvesDatabase(DatabaseBaseClass):
         for acct in ['A00119120300000', 'A00119220300000', '100169700600351', '100169700600325']:
             self._insert_financials_by_account(acct, start_date, end_date)
 
-    def process_speed_financials(self, start_date: date, end_date: date):
+    def _process_speed_financials(self, start_date: date, end_date: date) -> None:
         """
         Get the data related to the overheight automated enforcement program and put it in the database
         Accounts:
@@ -468,31 +465,28 @@ class AtvesDatabase(DatabaseBaseClass):
             logger.warning('Unable to insert financial data. It requires a reports session, which is not setup.')
             return
 
-        dates = self.get_dates_to_process(start_date, end_date, AtvesFinancial.ledger_posting_date)
-        for working_date in dates:
-            if (data := self.financial_interface.get_general_ledger_detail(working_date, working_date, account, '55'))\
-                    .empty:
-                # no data
-                return
-            for _, row in data.iterrows():
-                self._insert_or_update(AtvesFinancial(
-                    journal_entry_no=row['JournalEntryNo'],
-                    ledger_posting_date=row['LedgerPostingDate'],
-                    account_no=row['AccountNo'],
-                    legacy_account_no=row['LegacyAccountNo'],
-                    amount=row['Amount'],
-                    source_journal=row['SourceJournal'],
-                    trx_reference=row['TrxReference'],
-                    TrxDescription=row['TrxDescription'],
-                    user_who_posted=row['UserWhoPosted'],
-                    trx_no=row['TrxNo'],
-                    vendorid_or_customerid=row['VendorIDOrCustomerID'],
-                    vendor_or_customer_name=row['VendorOrCustomerName'],
-                    document_no=row['DocumentNo'],
-                    Trx_source=row['TrxSource'],
-                    account_description=row['AccountDescription'],
-                    account_type=row['AccountType'],
-                    agency_or_category=row['AgencyOrCategory']))
+        if (data := self.financial_interface.get_general_ledger_detail(start_date, end_date, account, '55')).empty:
+            # no data
+            return
+        for _, row in data.iterrows():
+            self._insert_or_update(AtvesFinancial(
+                journal_entry_no=row['JournalEntryNo'],
+                ledger_posting_date=row['LedgerPostingDate'],
+                account_no=row['AccountNo'],
+                legacy_account_no=row['LegacyAccountNo'],
+                amount=row['Amount'],
+                source_journal=row['SourceJournal'],
+                trx_reference=row['TrxReference'],
+                TrxDescription=row['TrxDescription'],
+                user_who_posted=row['UserWhoPosted'],
+                trx_no=row['TrxNo'],
+                vendorid_or_customerid=row['VendorIDOrCustomerID'],
+                vendor_or_customer_name=row['VendorOrCustomerName'],
+                document_no=row['DocumentNo'],
+                Trx_source=row['TrxSource'],
+                account_description=row['AccountDescription'],
+                account_type=row['AccountType'],
+                agency_or_category=row['AgencyOrCategory']))
 
     def get_lat_long(self, address):
         """
@@ -575,12 +569,6 @@ def parse_args(_args):
                         help='First date to process, inclusive (format YYYY-MM-DD). Defaults to 365 days ago')
     parser.add_argument('-e', '--enddate', type=date.fromisoformat, default=end_date,
                         help='Last date to process, inclusive (format YYYY-MM-DD). Defaults to yesterday.')
-    parser.add_argument('-a', '--allcams', action='store_true', help='Process all camera types. If this is set, then '
-                                                                     '-o, -r, -t, and -p are ignored.')
-    parser.add_argument('-o', '--oh', action='store_true', help='Process over height cameras')
-    parser.add_argument('-r', '--rl', action='store_true', help='Process red light cameras')
-    parser.add_argument('-t', '--tc', action='store_true', help='Process traffic counts')
-    parser.add_argument('-p', '--sc', action='store_true', help='Process speed cameras')
     parser.add_argument('-b', '--builddb', action='store_true',
                         help='Rebuilds (or updates) the camera location database')
     parser.add_argument('-f', '--force', action='store_true', help='By default, this will only pull data for dates that'
@@ -594,29 +582,17 @@ if __name__ == '__main__':
     args = parse_args(sys.argv[1:])
 
     ad = AtvesDatabase(conn_str=args.conn_str,
-                       axsis_user=AXSIS_USERNAME, axsis_pass=AXSIS_PASSWORD, conduent_user=CONDUENT_USERNAME,
-                       conduent_pass=CONDUENT_PASSWORD)
+                       axsis_user=AXSIS_USERNAME,
+                       axsis_pass=AXSIS_PASSWORD,
+                       conduent_user=CONDUENT_USERNAME,
+                       conduent_pass=CONDUENT_PASSWORD,
+                       report_user=REPORT_USERNAME,
+                       report_pass=REPORT_PASSWORD)
 
     _start_date = date(args.year, args.month, args.day)
     _end_date = (date(args.year, args.month, args.day) + timedelta(days=args.numofdays - 1))
 
-    all_cams = bool(args.allcams or not any([args.oh, args.rl, args.tc, args.sc]))
-
-    # Process traffic cameras
-    if args.tc or all_cams:
-        ad.process_traffic_count_data(_start_date, _end_date)
-
-    # Process over height cameras
-    if args.oh or all_cams:
-        ad.process_conduent_data_by_location(_start_date, _end_date, OVERHEIGHT)
-        ad.process_overheight_financials(_start_date, _end_date)
-
-    # Process red light cameras
-    if args.rl or all_cams:
-        ad.process_conduent_data_by_location(_start_date, _end_date, REDLIGHT)
-        ad.process_conduent_data_amber_time(_start_date, _end_date)
-        ad.process_redlight_financials(_start_date, _end_date)
-
-    # Process speed cameras
-    if args.sc or all_cams:
-        ad.process_speed_financials(_start_date, _end_date)
+    ad.process_traffic_count_data(_start_date, _end_date)
+    ad.process_violations(_start_date, _end_date)
+    ad.process_financials(_start_date, _end_date)
+    ad.process_conduent_data_amber_time(_start_date, _end_date)

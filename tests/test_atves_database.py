@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 from loguru import logger
-
 from sqlalchemy import create_engine, exc as sa_exc  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 
+from atves import OVERHEIGHT, REDLIGHT, SPEED
+from atves.atves_database import parse_args
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFinancial, AtvesTrafficCounts, \
     AtvesViolationCategories, AtvesViolations
-from atves.atves_database import parse_args
 
 
 def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
@@ -154,21 +154,35 @@ def test_atvesdb_process_violations(atvesdb_fixture, atvesdb_fixture_no_creds, c
 
 @pytest.mark.vpn
 def test_atvesdb_process_financials_overheight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
-    """Test process_overheight_financials"""
-
-
-@pytest.mark.vpn
-def test_atvesdb_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
-    """Test process_redlight_financials"""
+    """Test process_financials with OVERHEIGHT"""
     start_date = date(2021, 2, 1)
     end_date = date(2021, 2, 28)
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
-        atvesdb_fixture_no_creds.process_redlight_financials(start_date=start_date, end_date=end_date)
+        atvesdb_fixture_no_creds.process_financials(start_date=start_date, end_date=end_date, cam_type=OVERHEIGHT)
         ret = session.query(AtvesFinancial)
         assert ret.count() == 0
 
-        atvesdb_fixture.process_redlight_financials(start_date=start_date, end_date=end_date)
+        atvesdb_fixture.process_financials(start_date=start_date, end_date=end_date, cam_type=OVERHEIGHT)
+        ret = session.query(AtvesFinancial)
+        assert len([x.ledger_posting_date
+                    for x in ret
+                    if x.ledger_posting_date > end_date or x.ledger_posting_date < start_date]) == 0
+        assert ret.count() > 10
+
+
+@pytest.mark.vpn
+def test_atvesdb_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
+    """Test process_financials with REDLIGHT"""
+    start_date = date(2021, 2, 1)
+    end_date = date(2021, 2, 28)
+    engine = create_engine(conn_str, echo=True, future=True)
+    with Session(bind=engine, future=True) as session:
+        atvesdb_fixture_no_creds.process_financials(start_date=start_date, end_date=end_date, cam_type=REDLIGHT)
+        ret = session.query(AtvesFinancial)
+        assert ret.count() == 0
+
+        atvesdb_fixture.process_financials(start_date=start_date, end_date=end_date, cam_type=REDLIGHT)
         ret = session.query(AtvesFinancial)
         assert len([x.ledger_posting_date
                     for x in ret
@@ -178,16 +192,16 @@ def test_atvesdb_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no
 
 @pytest.mark.vpn
 def test_atvesdb_process_financials_speed(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
-    """Test process_speed_financials"""
+    """Test process_financials with SPEED"""
     start_date = date(2021, 2, 1)
     end_date = date(2021, 2, 28)
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
-        atvesdb_fixture_no_creds.process_speed_financials(start_date=start_date, end_date=end_date)
+        atvesdb_fixture_no_creds.process_financials(start_date=start_date, end_date=end_date, cam_type=SPEED)
         ret = session.query(AtvesFinancial)
         assert ret.count() == 0
 
-        atvesdb_fixture.process_speed_financials(start_date=start_date, end_date=end_date)
+        atvesdb_fixture.process_financials(start_date=start_date, end_date=end_date, cam_type=SPEED)
         ret = session.query(AtvesFinancial)
         assert len([x.ledger_posting_date
                     for x in ret
@@ -233,17 +247,11 @@ def test_parse_args():
     start_date = date(2021, 7, 20)
     end_date_str = '2021-07-21'
     end_date = date(2021, 7, 21)
-    args = parse_args(['-v', '-c', conn_str, '-s', start_date_str, '-e', end_date_str, '-a', '-o', '-r', '-t', '-p',
-                       '-b', '-f'])
+    args = parse_args(['-v', '-c', conn_str, '-s', start_date_str, '-e', end_date_str, '-b', '-f'])
     assert args.verbose
     assert not args.debug
     assert args.conn_str == conn_str
     assert args.startdate == start_date
     assert args.enddate == end_date
-    assert args.allcams
-    assert args.oh
-    assert args.rl
-    assert args.tc
-    assert args.sc
     assert args.builddb
     assert args.force
