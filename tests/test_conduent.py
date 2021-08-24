@@ -368,4 +368,4 @@ def verify_dataframes_len_and_date(dataframe: DataFrame, date_field: str, start_
     assert len(dataframe) > length
     assert len([row[date_field]
                 for _, row in dataframe.iterrows()
-                if not start_date <= pd.to_datetime(row[date_field]) <= end_date]) == 0
+                if not start_date <= row[date_field].date() <= end_date]) == 0
