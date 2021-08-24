@@ -10,7 +10,7 @@ from loguru import logger
 from sqlalchemy import create_engine, exc as sa_exc  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 
-from atves import OVERHEIGHT, REDLIGHT, SPEED
+from atves.constants import OVERHEIGHT, REDLIGHT, SPEED
 from atves.atves_database import parse_args
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFinancial, AtvesTrafficCounts, \
     AtvesViolationCategories, AtvesViolations

@@ -17,7 +17,7 @@ from sqlalchemy import create_engine, event  # type: ignore
 from sqlalchemy.engine import Engine  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 
-from atves import ALLCAMS, REDLIGHT, OVERHEIGHT, SPEED
+from atves.constants import ALLCAMS, REDLIGHT, OVERHEIGHT, SPEED
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFinancial, AtvesTrafficCounts, \
     AtvesViolations, AtvesViolationCategories, Base
 from atves.axsis import Axsis

@@ -12,7 +12,7 @@ from loguru import logger
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 
 from atves.conduent_types import CameraType, ConduentResultsType, SessionStateType
-from atves import ALLCAMS, REDLIGHT, OVERHEIGHT
+from atves.constants import ALLCAMS, REDLIGHT, OVERHEIGHT
 
 
 class Conduent:
