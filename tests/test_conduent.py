@@ -2,7 +2,6 @@
 import numbers
 from datetime import date, datetime
 
-import pandas as pd  # type: ignore
 import pytest
 from pandas.core.frame import DataFrame  # type: ignore
 
