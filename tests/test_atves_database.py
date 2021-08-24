@@ -133,7 +133,7 @@ def test_atvesdb_process_violations(atvesdb_fixture, atvesdb_fixture_no_creds, c
         assert ret.count() > 3000
 
 
-@pytest.skip
+@pytest.mark.skip
 def test_atvesdb_process_financials_overheight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """
     Test process_financials with OVERHEIGHT
