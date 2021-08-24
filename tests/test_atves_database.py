@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 from loguru import logger
-
 from sqlalchemy import create_engine, exc as sa_exc  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 
+from atves.constants import OVERHEIGHT, REDLIGHT, SPEED
+from atves.atves_database import parse_args
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFinancial, AtvesTrafficCounts, \
     AtvesViolationCategories, AtvesViolations
-from atves.atves_database import parse_args
 
 
 def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
@@ -25,8 +25,10 @@ def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no
                             AtvesCamLocations.lat,
                             AtvesCamLocations.long).filter(AtvesCamLocations.cam_type == 'RL')
         assert ret.count() > 100
-        assert all((-76.73 < i[1] < -76.52 for i in ret.all()))
-        assert all((39.2 < i[2] < 39.38 for i in ret.all()))
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=sa_exc.SAWarning)
+            assert all((-76.73 < i[1] < -76.52 for i in ret.all()))
+            assert all((39.2 < i[2] < 39.38 for i in ret.all()))
 
 
 def test_atvesdb_build_db_conduent_overheight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
@@ -68,9 +70,11 @@ def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_cred
                             AtvesCamLocations.long).filter(AtvesCamLocations.cam_type == 'SC')
         assert ret.count() > 10
 
-        # throw away None results, but make sure its not all of them
-        lats = [-76.73 < i[1] < -76.52 for i in ret.all() if i[1]]
-        lngs = [39.2 < i[2] < 39.38 for i in ret.all() if i[2]]
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=sa_exc.SAWarning)
+            # throw away None results, but make sure its not all of them
+            lats = [-76.73 < i[1] < -76.52 for i in ret.all() if i[1]]
+            lngs = [39.2 < i[2] < 39.38 for i in ret.all() if i[2]]
         assert all(lats)
         assert len(lats) > 10
         assert all(lngs)
@@ -92,29 +96,13 @@ def test_atvesdb_process_conduent_data_amber_time(atvesdb_fixture, atvesdb_fixtu
 
         atvesdb_fixture.process_conduent_data_amber_time(start_date=date(2020, 11, 1), end_date=date(2020, 11, 3))
         ret = session.query(AtvesAmberTimeRejects)
-        assert len([x.violation_date.date()
-                    for x in ret
-                    if x.violation_date.date() > date(2020, 11, 3) or x.violation_date.date() < date(2020, 11, 1)]) == 0
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=sa_exc.SAWarning)
+            assert len([x.violation_date.date()
+                        for x in ret
+                        if x.violation_date.date() > date(2020, 11, 3) or
+                        x.violation_date.date() < date(2020, 11, 1)]) == 0
         assert ret.count() > 30
-
-
-def test_atvesdb_process_conduent_data_by_location(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
-    """Testing process_conduent_data_by_location"""
-    engine = create_engine(conn_str, echo=True, future=True)
-    with Session(bind=engine, future=True) as session:
-        atvesdb_fixture_no_creds.process_conduent_data_by_location(start_date=date(2020, 11, 1),
-                                                                   end_date=date(2020, 11, 3))
-        ret = session.query(AtvesViolations)
-        assert ret.count() == 0
-
-        atvesdb_fixture.process_conduent_data_by_location(start_date=date(2010, 11, 1), end_date=date(2010, 11, 3))
-        ret = session.query(AtvesViolations)
-        assert ret.count() == 0
-
-        atvesdb_fixture.process_conduent_data_by_location(start_date=date(2020, 11, 1), end_date=date(2020, 11, 3))
-        ret = session.query(AtvesViolations)
-        assert len([x.date for x in ret if x.date > date(2020, 11, 3) or x.date < date(2020, 11, 1)]) == 0
-        assert ret.count() > 1500
 
 
 def test_atvesdb_process_traffic_count_data(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
@@ -152,23 +140,22 @@ def test_atvesdb_process_violations(atvesdb_fixture, atvesdb_fixture_no_creds, c
         assert ret.count() > 3000
 
 
-@pytest.mark.vpn
+@pytest.mark.skip
 def test_atvesdb_process_financials_overheight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
-    """Test process_overheight_financials"""
+    """
+    Test process_financials with OVERHEIGHT
 
-
-@pytest.mark.vpn
-def test_atvesdb_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
-    """Test process_redlight_financials"""
+    The overheight account number is wrong, so we are skipping this for now
+    """
     start_date = date(2021, 2, 1)
     end_date = date(2021, 2, 28)
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
-        atvesdb_fixture_no_creds.process_redlight_financials(start_date=start_date, end_date=end_date)
+        atvesdb_fixture_no_creds.process_financials(start_date=start_date, end_date=end_date, cam_type=OVERHEIGHT)
         ret = session.query(AtvesFinancial)
         assert ret.count() == 0
 
-        atvesdb_fixture.process_redlight_financials(start_date=start_date, end_date=end_date)
+        atvesdb_fixture.process_financials(start_date=start_date, end_date=end_date, cam_type=OVERHEIGHT)
         ret = session.query(AtvesFinancial)
         assert len([x.ledger_posting_date
                     for x in ret
@@ -177,21 +164,44 @@ def test_atvesdb_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no
 
 
 @pytest.mark.vpn
-def test_atvesdb_process_financials_speed(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
-    """Test process_speed_financials"""
+def test_atvesdb_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
+    """Test process_financials with REDLIGHT"""
     start_date = date(2021, 2, 1)
     end_date = date(2021, 2, 28)
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
-        atvesdb_fixture_no_creds.process_speed_financials(start_date=start_date, end_date=end_date)
+        atvesdb_fixture_no_creds.process_financials(start_date=start_date, end_date=end_date, cam_type=REDLIGHT)
         ret = session.query(AtvesFinancial)
         assert ret.count() == 0
 
-        atvesdb_fixture.process_speed_financials(start_date=start_date, end_date=end_date)
+        atvesdb_fixture.process_financials(start_date=start_date, end_date=end_date, cam_type=REDLIGHT)
         ret = session.query(AtvesFinancial)
-        assert len([x.ledger_posting_date
-                    for x in ret
-                    if x.ledger_posting_date > end_date or x.ledger_posting_date < start_date]) == 0
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=sa_exc.SAWarning)
+            assert len([x.ledger_posting_date
+                        for x in ret
+                        if x.ledger_posting_date > end_date or x.ledger_posting_date < start_date]) == 0
+        assert ret.count() > 10
+
+
+@pytest.mark.vpn
+def test_atvesdb_process_financials_speed(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
+    """Test process_financials with SPEED"""
+    start_date = date(2021, 2, 1)
+    end_date = date(2021, 2, 28)
+    engine = create_engine(conn_str, echo=True, future=True)
+    with Session(bind=engine, future=True) as session:
+        atvesdb_fixture_no_creds.process_financials(start_date=start_date, end_date=end_date, cam_type=SPEED)
+        ret = session.query(AtvesFinancial)
+        assert ret.count() == 0
+
+        atvesdb_fixture.process_financials(start_date=start_date, end_date=end_date, cam_type=SPEED)
+        ret = session.query(AtvesFinancial)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=sa_exc.SAWarning)
+            assert len([x.ledger_posting_date
+                        for x in ret
+                        if x.ledger_posting_date > end_date or x.ledger_posting_date < start_date]) == 0
         assert ret.count() > 10
 
 
@@ -233,16 +243,11 @@ def test_parse_args():
     start_date = date(2021, 7, 20)
     end_date_str = '2021-07-21'
     end_date = date(2021, 7, 21)
-    args = parse_args(['-v', '-c', conn_str, '-s', start_date_str, '-e', end_date_str, '-a', '-o', '-r', '-t', '-p',
-                       '-b'])
+    args = parse_args(['-v', '-c', conn_str, '-s', start_date_str, '-e', end_date_str, '-b', '-f'])
     assert args.verbose
     assert not args.debug
     assert args.conn_str == conn_str
     assert args.startdate == start_date
     assert args.enddate == end_date
-    assert args.allcams
-    assert args.oh
-    assert args.rl
-    assert args.tc
-    assert args.sc
     assert args.builddb
+    assert args.force

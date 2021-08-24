@@ -12,11 +12,7 @@ from loguru import logger
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 
 from atves.conduent_types import CameraType, ConduentResultsType, SessionStateType
-
-# Camera type
-ALLCAMS = 0
-REDLIGHT = 1
-OVERHEIGHT = 2
+from atves.constants import ALLCAMS, REDLIGHT, OVERHEIGHT
 
 
 class Conduent:
@@ -126,7 +122,7 @@ class Conduent:
         Gets camera information by location id. The id is <ID> in
         https://cw3.cite-web.com/citeweb3/locationByID.asp?ID=<ID>
         :param loc_id: Camera ID to lookup
-        :param cam_type: Type of camera data to pull (use the constants conduent.REDLIGHT or conduent.OVERHEIGHT
+        :param cam_type: Type of camera data to pull (use the constants atves.REDLIGHT or atves.OVERHEIGHT
         :return: Dictionary of type `atves.conduent_types.CameraType` with camera data
         """
         ret: CameraType = {
@@ -221,8 +217,8 @@ class Conduent:
         Gets the values of the red light camera deployments, with the number of accepted and rejected tickets
         :param start_date: Start date of the report to pull
         :param end_date: End date of the report to pull
-        :param cam_type: Type of camera data to pull (use the constants conduent.REDLIGHT or conduent.OVERHEIGHT or
-            conduent.ALLCAMS (default: conduent.ALLCAMS)
+        :param cam_type: Type of camera data to pull (use the constants atves.REDLIGHT or atves.OVERHEIGHT or
+            atves.ALLCAMS (default: atves.ALLCAMS)
         :return: (list of dictionaries) Results with id, start_time, end_time, location, equip_type, accepted, rejected
         """
         logger.info("Getting deployment information for {} - {} and cam type {}", start_date, end_date, cam_type)
@@ -257,7 +253,7 @@ class Conduent:
                                             location='999,All Locations') -> Optional[pd.DataFrame]:
         """
         Downloads the report detailing approval by review date
-        :param cam_type: Camera type to query. Either conduent.OVERHEIGHT or conduent.REDLIGHT
+        :param cam_type: Camera type to query. Either atves.OVERHEIGHT or atves.REDLIGHT
         :param start_date: Start date of the report to pull
         :param end_date: End date of the report to pull
         :param location: Optional location search. Uses the codes from the website
@@ -297,7 +293,7 @@ class Conduent:
                                       location='999,All Locations') -> pd.DataFrame:
         """
         Downloads the approval summary by queue report
-        :param cam_type: Camera type to query. Either conduent.OVERHEIGHT or conduent.REDLIGHT
+        :param cam_type: Camera type to query. Either atves.OVERHEIGHT or atves.REDLIGHT
         :param start_date: Start date of the report to pull
         :param end_date: End date of the report to pull
         :param location: Optional location search. Uses the codes from the website
@@ -325,7 +321,7 @@ class Conduent:
                                        location='999,All Locations') -> pd.DataFrame:
         """
         Downloads the client summary by location
-        :param cam_type: Camera type to query. Either conduent.OVERHEIGHT, conduent.REDLIGHT, or conduent.ALLCAMS
+        :param cam_type: Camera type to query. Either atves.OVERHEIGHT, atves.REDLIGHT, or atves.ALLCAMS
         :param start_date: Start date of the report to pull
         :param end_date: End date of the report to pull
         :param location: Optional location search. Uses the codes from the website
@@ -492,7 +488,7 @@ class Conduent:
         """
         Pulls the specified report
         :param report_type: Report type, which is the same as what is posted to univReport.asp
-        :param cam_type: Camera type to query. Either conduent.OVERHEIGHT or conduent.REDLIGHT
+        :param cam_type: Camera type to query. Either atves.OVERHEIGHT or atves.REDLIGHT
         :param input_params: (dict) Parameters where the value is defined externally, such as search dates. Should be
         a dict with the parameter name and parameter value, as named on citeweb
         :param scrape_params: (list) Parameters that are defined internally to citeweb, and need to be scraped from
