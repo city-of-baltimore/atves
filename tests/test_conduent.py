@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 import pytest
 from pandas.core.frame import DataFrame  # type: ignore
+from loguru import logger
 
 import atves
 
@@ -341,10 +342,14 @@ def test_conduent_get_daily_self_test(conduent_fixture):
 def test_conduent_get_pending_client_approval(conduent_fixture):
     """Tests get_pending_client_approval"""
     ret = conduent_fixture.get_pending_client_approval(atves.conduent.REDLIGHT)
-    assert len(ret) >= 1
+    assert len(ret) >= 0
+    if len(ret) == 0:
+        logger.warning('Did not get any pending client approvals for Redlight. This is not necessarily an error.')
 
     ret = conduent_fixture.get_pending_client_approval(atves.conduent.OVERHEIGHT)
-    assert len(ret) >= 1
+    assert len(ret) >= 0
+    if len(ret) == 0:
+        logger.warning('Did not get any pending client approvals for Overheight. This is not necessarily an error.')
 
     # invalid cam type
     with pytest.raises(AssertionError):
