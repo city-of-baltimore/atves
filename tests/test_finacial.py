@@ -11,6 +11,6 @@ def test_financial_get_general_ledger_detail(cobreport_fixture):
     res = cobreport_fixture.get_general_ledger_detail(start_date, end_date, 'A00119120300000', '55')
     assert len([row['LedgerPostingDate']
                 for _, row in res.iterrows()
-                if not start_date <= row['LedgerPostingDate'] <= end_date]) == 0
+                if not start_date <= row['LedgerPostingDate'].date() <= end_date]) == 0
     assert len(res) > 5
     assert len(res.columns) == 17
