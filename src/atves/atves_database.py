@@ -502,8 +502,8 @@ class AtvesDatabase(DatabaseBaseClass):
         lat = None
         lng = None
         if geo_dict and geo_dict[0]['score'] > 90:
-            lat = float(geo_dict[0]['location']['x'])
-            lng = float(geo_dict[0]['location']['y'])
+            lat = float(geo_dict[0]['location']['y'])
+            lng = float(geo_dict[0]['location']['x'])
         return lat, lng
 
     @staticmethod
