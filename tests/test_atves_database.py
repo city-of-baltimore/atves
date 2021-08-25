@@ -73,8 +73,8 @@ def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_cred
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', category=sa_exc.SAWarning)
             # throw away None results, but make sure its not all of them
-            lats = [-76.73 < i[1] < -76.52 for i in ret.all() if i[1]]
-            lngs = [39.2 < i[2] < 39.38 for i in ret.all() if i[2]]
+            lats = [-76.73 < i[1] < -76.52 for i in ret.all() if i[2]]
+            lngs = [39.2 < i[2] < 39.38 for i in ret.all() if i[1]]
         assert all(lats)
         assert len(lats) > 10
         assert all(lngs)
