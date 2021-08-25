@@ -10,7 +10,7 @@ Base: DeclarativeMeta = declarative_base()
 
 class AtvesTrafficCounts(Base):
     """Table holding the traffic counts from the speed cameras"""
-    __tablename__ = "atves_traffic_counts"
+    __tablename__ = 'atves_traffic_counts'
 
     location_code = Column(String(length=100), ForeignKey('atves_cam_locations.location_code'), primary_key=True)
     date = Column(Date, primary_key=True)
@@ -19,7 +19,7 @@ class AtvesTrafficCounts(Base):
 
 class AtvesCamLocations(Base):
     """The camera location database looks like this"""
-    __tablename__ = "atves_cam_locations"
+    __tablename__ = 'atves_cam_locations'
 
     location_code = Column(String(length=100), primary_key=True)
     locationdescription = Column(String(length=100), nullable=False)
@@ -36,7 +36,7 @@ class AtvesCamLocations(Base):
 
 class AtvesAmberTimeRejects(Base):
     """get_amber_time_rejects_report (red light only)"""
-    __tablename__ = "atves_amber_time_rejects"
+    __tablename__ = 'atves_amber_time_rejects'
 
     location_code = Column(String(length=100), ForeignKey('atves_cam_locations.location_code'))
     deployment_no = Column(Integer, nullable=False)
@@ -48,18 +48,18 @@ class AtvesAmberTimeRejects(Base):
 
 class AtvesViolations(Base):
     """Violation counts"""
-    __tablename__ = "atves_violations"
+    __tablename__ = 'atves_violations'
 
-    date = Column(Date)
-    location_code = Column(String(length=100), primary_key=True)
-    count = Column(Integer)
+    date = Column(Date, primary_key=True)
+    location_code = Column(String(length=100), ForeignKey('atves_cam_locations.location_code'), primary_key=True)
+    count = Column(Integer, nullable=False)
     violation_cat = Column(Integer, ForeignKey('atves_violation_categories.violation_cat'), primary_key=True)
     details = Column(String(length=100), primary_key=True)
 
 
 class AtvesViolationCategories(Base):
     """Lookup table for the violation_cat column in AtvesViolations"""
-    __tablename__ = "atves_violation_categories"
+    __tablename__ = 'atves_violation_categories'
 
     violation_cat = Column(Integer, primary_key=True)
     description = Column(String(length=100))

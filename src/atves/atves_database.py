@@ -5,11 +5,14 @@ import math
 import os
 import re
 import sys
+import warnings
 from datetime import date, datetime, timedelta
 from sqlite3 import Connection as SQLite3Connection
-from typing import Optional
+from typing import Optional, Tuple
 
-from arcgis.geocoding import geocode  # type: ignore
+with warnings.catch_warnings():  # https://github.com/Esri/arcgis-python-api/issues/1090
+    warnings.simplefilter("ignore")
+    from arcgis.geocoding import geocode  # type: ignore
 from arcgis.gis import GIS  # type: ignore
 from databasebaseclass.base import DatabaseBaseClass
 from loguru import logger
@@ -26,7 +29,9 @@ from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDU
     REPORT_PASSWORD
 from atves.financial import CobReports
 
-GIS()
+with warnings.catch_warnings():  # https://github.com/Esri/arcgis-python-api/issues/1090
+    warnings.simplefilter("ignore")
+    GIS()
 
 
 @event.listens_for(Engine, 'connect')
@@ -281,8 +286,7 @@ class AtvesDatabase(DatabaseBaseClass):
                 for event_date in columns:
                     if not math.isnan(row[event_date]):
                         self._insert_or_update(AtvesTrafficCounts(location_code=str(row['Location code']).strip(),
-                                                                  date=datetime.strptime(event_date,
-                                                                                         '%m/%d/%Y').date(),
+                                                                  date=datetime.strptime(event_date, '%m/%d/%Y').date(),
                                                                   count=int(row[event_date])))
 
     def _process_traffic_count_data_conduent(self, start_date: date, end_date: date) -> None:
@@ -342,7 +346,7 @@ class AtvesDatabase(DatabaseBaseClass):
                                (5, 'Nov Issued'),
                                (5, 'Warning Issued')):
                 self._insert_or_update(AtvesViolations(date=row['Date'],
-                                                       location_code=row['Location Code'],
+                                                       location_code=str(row['Location Code']),
                                                        count=row[desc],
                                                        violation_cat=code,
                                                        details=desc))
@@ -397,7 +401,7 @@ class AtvesDatabase(DatabaseBaseClass):
             if location_id == 0:
                 continue
             self._insert_or_update(AtvesViolations(date=row['Date'],
-                                                   location_code=location_id,
+                                                   location_code=str(location_id),
                                                    count=int(row['DetailCount']),
                                                    violation_cat=violation_lookup[row['iOrderBy']],
                                                    details=str(row['vcDescription'])))
@@ -474,7 +478,7 @@ class AtvesDatabase(DatabaseBaseClass):
                 ledger_posting_date=row['LedgerPostingDate'],
                 account_no=row['AccountNo'],
                 legacy_account_no=row['LegacyAccountNo'],
-                amount=row['Amount'],
+                amount=float(row['Amount']),
                 source_journal=row['SourceJournal'],
                 trx_reference=row['TrxReference'],
                 TrxDescription=row['TrxDescription'],
@@ -488,7 +492,7 @@ class AtvesDatabase(DatabaseBaseClass):
                 account_type=row['AccountType'],
                 agency_or_category=row['AgencyOrCategory']))
 
-    def get_lat_long(self, address):
+    def get_lat_long(self, address) -> Tuple[Optional[float], Optional[float]]:
         """
         Get the latitude and longitude for an address if the accuracy score is high enough
         :param address: Street address to search. The more complete the address, the better.
@@ -498,8 +502,8 @@ class AtvesDatabase(DatabaseBaseClass):
         lat = None
         lng = None
         if geo_dict and geo_dict[0]['score'] > 90:
-            lat = geo_dict[0]['location']['x']
-            lng = geo_dict[0]['location']['y']
+            lat = float(geo_dict[0]['location']['x'])
+            lng = float(geo_dict[0]['location']['y'])
         return lat, lng
 
     @staticmethod
