@@ -540,7 +540,7 @@ def setup_parser(help_str):
     return parser
 
 
-def setup_logging(debug=False, verbose=False):
+def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     """
     Configures the logging level, and sets up file based logging
 
@@ -584,6 +584,7 @@ def parse_args(_args):
 
 if __name__ == '__main__':
     args = parse_args(sys.argv[1:])
+    setup_logging(args.debug, args.verbose)
 
     ad = AtvesDatabase(conn_str=args.conn_str,
                        axsis_user=AXSIS_USERNAME,
