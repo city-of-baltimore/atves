@@ -482,7 +482,7 @@ class Conduent:
         return self.get_report(report, OVERHEIGHT)
 
     @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
-           retry=retry_if_exception_type(requests.exceptions.ConnectionError))
+           retry=retry_if_exception_type((requests.exceptions.ConnectionError, urllib.error.URLError)))
     def get_report(self, report_type, cam_type, input_params=None,  # pylint:disable=too-many-arguments,too-many-locals
                    scrape_params=None, parse_dates=None) -> Optional[pd.DataFrame]:
         """
