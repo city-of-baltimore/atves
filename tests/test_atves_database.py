@@ -27,8 +27,8 @@ def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no
         assert ret.count() > 100
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', category=sa_exc.SAWarning)
-            assert all((-76.73 < i[1] < -76.52 for i in ret.all()))
-            assert all((39.2 < i[2] < 39.38 for i in ret.all()))
+            assert all((39.2 < i[1] < 39.38 for i in ret.all()))
+            assert all((-76.73 < i[2] < -76.52 for i in ret.all()))
 
 
 def test_atvesdb_build_db_conduent_overheight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
@@ -48,8 +48,8 @@ def test_atvesdb_build_db_conduent_overheight(atvesdb_fixture, atvesdb_fixture_n
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', category=sa_exc.SAWarning)
             vals = ret.all()
-            lats = [-76.73 < i[1] < -76.52 for i in vals if i[1]]
-            lngs = [39.2 < i[2] < 39.38 for i in vals if i[2]]
+            lats = [39.2 < i[1] < 39.38 for i in vals if i[1]]
+            lngs = [-76.73 < i[2] < -76.52 for i in vals if i[2]]
             speed_limits = [i for i in vals if i[4]]
             effective_dates = [i for i in vals if i[5]]
             assert all(lats)
@@ -73,8 +73,8 @@ def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_cred
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', category=sa_exc.SAWarning)
             # throw away None results, but make sure its not all of them
-            lats = [-76.73 < i[1] < -76.52 for i in ret.all() if i[2]]
-            lngs = [39.2 < i[2] < 39.38 for i in ret.all() if i[1]]
+            lats = [39.2 < i[1] < 39.38 for i in ret.all() if i[1]]
+            lngs = [-76.73 < i[2] < -76.52 for i in ret.all() if i[2]]
         assert all(lats)
         assert len(lats) > 10
         assert all(lngs)
