@@ -109,6 +109,15 @@ def fixture_conn_str(tmp_path_factory):
             AtvesTrafficCounts(location_code='BAL102',
                                date=to_datetime('2020-11-01 00:00:00.000'),
                                count=33),
+            AtvesViolations(date=to_datetime('2020-01-01 00:00:00.000'),
+                            location_code='BAL100',
+                            details='Citations Issued'),
+            AtvesViolations(date=to_datetime('2020-01-02 00:00:00.000'),
+                            location_code='BAL100',
+                            details='Citations Issued'),
+            AtvesViolations(date=to_datetime('2020-01-03 00:00:00.000'),
+                            location_code='BAL100',
+                            details='Citations Issued')
             ])
     return conn_str
 

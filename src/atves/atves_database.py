@@ -10,9 +10,7 @@ from datetime import date, datetime, timedelta
 from sqlite3 import Connection as SQLite3Connection
 from typing import Optional, Tuple
 
-with warnings.catch_warnings():  # https://github.com/Esri/arcgis-python-api/issues/1090
-    warnings.simplefilter("ignore")
-    from arcgis.geocoding import geocode  # type: ignore
+from arcgis.geocoding import geocode  # type: ignore
 from arcgis.gis import GIS  # type: ignore
 from databasebaseclass.base import DatabaseBaseClass
 from loguru import logger
@@ -29,9 +27,7 @@ from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDU
     REPORT_PASSWORD
 from atves.financial import CobReports
 
-with warnings.catch_warnings():  # https://github.com/Esri/arcgis-python-api/issues/1090
-    warnings.simplefilter("ignore")
-    GIS()
+GIS()
 
 
 @event.listens_for(Engine, 'connect')
@@ -201,9 +197,11 @@ class AtvesDatabase(DatabaseBaseClass):
                     filter(AtvesTrafficCounts.location_code == location_code).all()
 
                 try:
-                    cam_date: Optional[datetime] = datetime.strptime(traffic_counts[0][1], '%Y-%m-%d')
+                    cam_date: datetime = datetime.strptime(traffic_counts[0][1], '%Y-%m-%d')
                 except IndexError:
-                    cam_date = None
+                    ret = session.query(AtvesViolations.date).filter(AtvesViolations.details == 'Citations Issued') \
+                        .order_by(AtvesViolations.date).first()
+                    cam_date = ret
 
                 if not location:
                     continue
@@ -498,7 +496,9 @@ class AtvesDatabase(DatabaseBaseClass):
         :param address: Street address to search. The more complete the address, the better.
         """
         address = self._standardize_address(address)
-        geo_dict = geocode('{}, Baltimore, MD'.format(address))
+        with warnings.catch_warnings():  # https://github.com/Esri/arcgis-python-api/issues/1090
+            warnings.simplefilter("ignore")
+            geo_dict = geocode('{}, Baltimore, MD'.format(address))
         lat = None
         lng = None
         if geo_dict and geo_dict[0]['score'] > 90:
@@ -554,14 +554,11 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     elif verbose:
         log_level = 'INFO'
 
-    handlers = [
-        {'sink': sys.stdout, 'format': '{time} - {message}', 'colorize': True, 'backtrace': True, 'diagnose': True,
-         'level': log_level},
-        {'sink': os.path.join('logs', 'file-{time}.log'), 'serialize': True, 'backtrace': True,
-         'diagnose': True, 'rotation': '1 week', 'retention': '3 months', 'compression': 'zip', 'level': log_level},
-    ]
-
-    logger.configure(handlers=handlers)
+    logger.add(sys.stdout, format="<green>{time}</green> <level>{message}</level>", colorize=True, backtrace=True,
+               diagnose=True, level=log_level)
+    logger.add(os.path.join('logs', 'file-{time}.log'), format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}",
+               serialize=True, backtrace=True, diagnose=True, rotation='1 week', retention='3 months',
+               compression='zip', level=log_level)
 
 
 def parse_args(_args):

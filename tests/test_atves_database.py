@@ -67,7 +67,8 @@ def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_cred
         # atvesdb_fixture.build_location_db() is called in the setup
         ret = session.query(AtvesCamLocations.cam_type,
                             AtvesCamLocations.lat,
-                            AtvesCamLocations.long).filter(AtvesCamLocations.cam_type == 'SC')
+                            AtvesCamLocations.long,
+                            AtvesCamLocations.effective_date).filter(AtvesCamLocations.cam_type == 'SC')
         assert ret.count() > 10
 
         with warnings.catch_warnings():
@@ -79,6 +80,9 @@ def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_cred
         assert len(lats) > 10
         assert all(lngs)
         assert len(lngs) > 10
+
+        ret = session.query(AtvesCamLocations.effective_date).filter(AtvesCamLocations.cam_type == 'BAL100')
+        assert ret[0][1] == date(2020, 1, 1)
 
 
 def test_atvesdb_process_conduent_data_amber_time(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
