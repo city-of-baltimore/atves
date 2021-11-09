@@ -1,6 +1,5 @@
 """Pytest directory-specific hook implementations"""
 import pytest
-from pandas import to_datetime  # type: ignore
 from sqlalchemy import create_engine  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 
@@ -77,6 +76,7 @@ def fixture_cobreport(report_username, report_password):
 @pytest.fixture(scope='session', name='atvesdb_fixture')
 def fixture_atvesdb(conn_str, axsis_username, axsis_password,  # pylint:disable=too-many-arguments
                     conduent_username, conduent_password, report_username, report_password):
+    """ATVES Database object"""
     ret = atves.atves_database.AtvesDatabase(conn_str, axsis_username, axsis_password, conduent_username,
                                              conduent_password, report_username, report_password)
     ret.build_location_db()
