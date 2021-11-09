@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session  # type: ignore
 
 import atves
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesFinancial, AtvesTrafficCounts, AtvesViolations, \
-    AtvesViolationCategories, Base
+    AtvesViolationCategories
 
 
 def pytest_addoption(parser):
@@ -77,7 +77,6 @@ def fixture_cobreport(report_username, report_password):
 @pytest.fixture(scope='session', name='atvesdb_fixture')
 def fixture_atvesdb(conn_str, axsis_username, axsis_password,  # pylint:disable=too-many-arguments
                     conduent_username, conduent_password, report_username, report_password):
-    """ATVES Database object"""
     ret = atves.atves_database.AtvesDatabase(conn_str, axsis_username, axsis_password, conduent_username,
                                              conduent_password, report_username, report_password)
     ret.build_location_db()
@@ -93,33 +92,7 @@ def fixture_atvesdb_no_creds(conn_str):
 @pytest.fixture(scope='session', name='conn_str')
 def fixture_conn_str(tmp_path_factory):
     """Fixture for the WorksheetMaker class"""
-    conn_str = 'sqlite:///{}'.format(str(tmp_path_factory.mktemp("data") / 'atves.db'))
-    engine = create_engine(conn_str, echo=True, future=True)
-    with engine.begin() as connection:
-        Base.metadata.create_all(connection)
-
-    with Session(bind=engine) as session:
-        session.add_all([
-            AtvesTrafficCounts(location_code='BAL101',
-                               date=to_datetime('2020-11-01 00:00:00.000'),
-                               count=348),
-            AtvesTrafficCounts(location_code='BAL101',
-                               date=to_datetime('2020-11-02 00:00:00.000'),
-                               count=52),
-            AtvesTrafficCounts(location_code='BAL102',
-                               date=to_datetime('2020-11-01 00:00:00.000'),
-                               count=33),
-            AtvesViolations(date=to_datetime('2020-01-01 00:00:00.000'),
-                            location_code='BAL100',
-                            details='Citations Issued'),
-            AtvesViolations(date=to_datetime('2020-01-02 00:00:00.000'),
-                            location_code='BAL100',
-                            details='Citations Issued'),
-            AtvesViolations(date=to_datetime('2020-01-03 00:00:00.000'),
-                            location_code='BAL100',
-                            details='Citations Issued')
-            ])
-    return conn_str
+    return 'sqlite:///{}'.format(str(tmp_path_factory.mktemp('data') / 'atves.db'))
 
 
 @pytest.fixture(name='reset_database')

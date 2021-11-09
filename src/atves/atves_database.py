@@ -189,26 +189,39 @@ class AtvesDatabase(DatabaseBaseClass):
                            for param_elem in param['ParmList']]
 
             for location_code, location in active_cams:
+                cam_date: Optional[datetime] = None
+                lat: Optional[float] = None
+                lng: Optional[float] = None
+
                 if not location_code:
                     continue
 
-                # First, lets get a date when this camera existed
+                # First, lets get a date when this camera existed... lets look for traffic counts first
                 traffic_counts = session.query(AtvesTrafficCounts.date). \
-                    filter(AtvesTrafficCounts.location_code == location_code).all()
+                    filter(AtvesTrafficCounts.location_code == location_code). \
+                    order_by(AtvesTrafficCounts.date).first()
 
-                try:
-                    cam_date: datetime = datetime.strptime(traffic_counts[0][1], '%Y-%m-%d')
-                except IndexError:
-                    ret = session.query(AtvesViolations.date).filter(AtvesViolations.details == 'Citations Issued') \
+                if traffic_counts:
+                    try:
+                        cam_date: datetime = datetime.strptime(traffic_counts[0][1], '%Y-%m-%d')
+                    except IndexError:
+                        pass
+
+                # if there were no traffic counts, lets look for issued violations
+                if not cam_date:
+                    ret = session.query(AtvesViolations.date) \
+                        .filter(AtvesViolations.details == 'Citations Issued') \
+                        .filter(AtvesViolations.location_code == location_code) \
                         .order_by(AtvesViolations.date).first()
-                    cam_date = ret
+                    if ret:
+                        cam_date = ret[0]
 
-                if not location:
-                    continue
+                # if the location was specified, then lets look it up
+                if location:
+                    lat, lng = self.get_lat_long(location)
+                    if not (lat and lng):
+                        continue
 
-                lat, lng = self.get_lat_long(location)
-                if not (lat and lng):
-                    continue
                 self._insert_or_update(AtvesCamLocations(location_code=location_code,
                                                          locationdescription=location,
                                                          lat=lat,
@@ -595,3 +608,4 @@ if __name__ == '__main__':
     ad.process_violations(args.startdate, args.enddate)
     ad.process_financials(args.startdate, args.enddate)
     ad.process_conduent_data_amber_time(args.startdate, args.enddate)
+    ad.build_location_db(args.builddb)
