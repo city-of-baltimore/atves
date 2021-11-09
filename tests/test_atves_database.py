@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from loguru import logger
+from pandas import to_datetime  # type: ignore
 from sqlalchemy import create_engine, exc as sa_exc  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 
@@ -67,7 +68,8 @@ def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_cred
         # atvesdb_fixture.build_location_db() is called in the setup
         ret = session.query(AtvesCamLocations.cam_type,
                             AtvesCamLocations.lat,
-                            AtvesCamLocations.long).filter(AtvesCamLocations.cam_type == 'SC')
+                            AtvesCamLocations.long,
+                            AtvesCamLocations.effective_date).filter(AtvesCamLocations.cam_type == 'SC')
         assert ret.count() > 10
 
         with warnings.catch_warnings():
@@ -79,6 +81,41 @@ def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_cred
         assert len(lats) > 10
         assert all(lngs)
         assert len(lngs) > 10
+
+        ret = session.query(AtvesCamLocations.effective_date).filter(AtvesCamLocations.location_code == 'BAL100')
+        assert not ret.all()[0][0]
+
+        session.add_all([
+            AtvesViolationCategories(
+                violation_cat=1,
+                description=' '),
+            AtvesViolations(
+                date=to_datetime('2020-01-01 00:00:00.000'),
+                location_code='BAL100',
+                count=0,
+                violation_cat=1,
+                details='Citations Issued'),
+            AtvesViolations(
+                date=to_datetime('2020-01-02 00:00:00.000'),
+                location_code='BAL100',
+                count=0,
+                violation_cat=1,
+                details='Citations Issued'),
+            AtvesViolations(
+                date=to_datetime('2020-01-03 00:00:00.000'),
+                location_code='BAL100',
+                count=0,
+                violation_cat=1,
+                details='Citations Issued')
+        ])
+        session.commit()
+
+        atvesdb_fixture.build_location_db(True)
+        ret = session.query(AtvesCamLocations.effective_date).filter(AtvesCamLocations.location_code == 'BAL100')
+        assert ret.all()[0][0] == date(2020, 1, 1)
+
+        ret = session.query(AtvesCamLocations.effective_date).filter(AtvesCamLocations.location_code == 'BAL101')
+        assert not ret.all()[0][0]
 
 
 def test_atvesdb_process_conduent_data_amber_time(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):

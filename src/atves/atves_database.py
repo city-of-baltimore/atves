@@ -10,9 +10,7 @@ from datetime import date, datetime, timedelta
 from sqlite3 import Connection as SQLite3Connection
 from typing import Optional, Tuple
 
-with warnings.catch_warnings():  # https://github.com/Esri/arcgis-python-api/issues/1090
-    warnings.simplefilter("ignore")
-    from arcgis.geocoding import geocode  # type: ignore
+from arcgis.geocoding import geocode  # type: ignore
 from arcgis.gis import GIS  # type: ignore
 from databasebaseclass.base import DatabaseBaseClass
 from loguru import logger
@@ -29,9 +27,7 @@ from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDU
     REPORT_PASSWORD
 from atves.financial import CobReports
 
-with warnings.catch_warnings():  # https://github.com/Esri/arcgis-python-api/issues/1090
-    warnings.simplefilter("ignore")
-    GIS()
+GIS()
 
 
 @event.listens_for(Engine, 'connect')
@@ -193,24 +189,39 @@ class AtvesDatabase(DatabaseBaseClass):
                            for param_elem in param['ParmList']]
 
             for location_code, location in active_cams:
+                cam_date: Optional[datetime] = None
+                lat: Optional[float] = None
+                lng: Optional[float] = None
+
                 if not location_code:
                     continue
 
-                # First, lets get a date when this camera existed
+                # First, lets get a date when this camera existed... lets look for traffic counts first
                 traffic_counts = session.query(AtvesTrafficCounts.date). \
-                    filter(AtvesTrafficCounts.location_code == location_code).all()
+                    filter(AtvesTrafficCounts.location_code == location_code). \
+                    order_by(AtvesTrafficCounts.date).first()
 
-                try:
-                    cam_date: Optional[datetime] = datetime.strptime(traffic_counts[0][1], '%Y-%m-%d')
-                except IndexError:
-                    cam_date = None
+                if traffic_counts:
+                    try:
+                        cam_date = datetime.strptime(traffic_counts[0][1], '%Y-%m-%d')
+                    except IndexError:
+                        pass
 
-                if not location:
-                    continue
+                # if there were no traffic counts, lets look for issued violations
+                if not cam_date:
+                    ret = session.query(AtvesViolations.date) \
+                        .filter(AtvesViolations.details == 'Citations Issued') \
+                        .filter(AtvesViolations.location_code == location_code) \
+                        .order_by(AtvesViolations.date).first()
+                    if ret:
+                        cam_date = ret[0]
 
-                lat, lng = self.get_lat_long(location)
-                if not (lat and lng):
-                    continue
+                # if the location was specified, then lets look it up
+                if location:
+                    lat, lng = self.get_lat_long(location)
+                    if not (lat and lng):
+                        continue
+
                 self._insert_or_update(AtvesCamLocations(location_code=location_code,
                                                          locationdescription=location,
                                                          lat=lat,
@@ -498,7 +509,9 @@ class AtvesDatabase(DatabaseBaseClass):
         :param address: Street address to search. The more complete the address, the better.
         """
         address = self._standardize_address(address)
-        geo_dict = geocode('{}, Baltimore, MD'.format(address))
+        with warnings.catch_warnings():  # https://github.com/Esri/arcgis-python-api/issues/1090
+            warnings.simplefilter("ignore")
+            geo_dict = geocode('{}, Baltimore, MD'.format(address))
         lat = None
         lng = None
         if geo_dict and geo_dict[0]['score'] > 90:
@@ -554,14 +567,11 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     elif verbose:
         log_level = 'INFO'
 
-    handlers = [
-        {'sink': sys.stdout, 'format': '{time} - {message}', 'colorize': True, 'backtrace': True, 'diagnose': True,
-         'level': log_level},
-        {'sink': os.path.join('logs', 'file-{time}.log'), 'serialize': True, 'backtrace': True,
-         'diagnose': True, 'rotation': '1 week', 'retention': '3 months', 'compression': 'zip', 'level': log_level},
-    ]
-
-    logger.configure(handlers=handlers)
+    logger.add(sys.stdout, format="<green>{time}</green> <level>{message}</level>", colorize=True, backtrace=True,
+               diagnose=True, level=log_level)
+    logger.add(os.path.join('logs', 'file-{time}.log'), format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}",
+               serialize=True, backtrace=True, diagnose=True, rotation='1 week', retention='3 months',
+               compression='zip', level=log_level)
 
 
 def parse_args(_args):
@@ -598,3 +608,4 @@ if __name__ == '__main__':
     ad.process_violations(args.startdate, args.enddate)
     ad.process_financials(args.startdate, args.enddate)
     ad.process_conduent_data_amber_time(args.startdate, args.enddate)
+    ad.build_location_db(args.builddb)

@@ -1,12 +1,11 @@
 """Pytest directory-specific hook implementations"""
 import pytest
-from pandas import to_datetime  # type: ignore
 from sqlalchemy import create_engine  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 
 import atves
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesFinancial, AtvesTrafficCounts, AtvesViolations, \
-    AtvesViolationCategories, Base
+    AtvesViolationCategories
 
 
 def pytest_addoption(parser):
@@ -93,24 +92,7 @@ def fixture_atvesdb_no_creds(conn_str):
 @pytest.fixture(scope='session', name='conn_str')
 def fixture_conn_str(tmp_path_factory):
     """Fixture for the WorksheetMaker class"""
-    conn_str = 'sqlite:///{}'.format(str(tmp_path_factory.mktemp("data") / 'atves.db'))
-    engine = create_engine(conn_str, echo=True, future=True)
-    with engine.begin() as connection:
-        Base.metadata.create_all(connection)
-
-    with Session(bind=engine) as session:
-        session.add_all([
-            AtvesTrafficCounts(location_code='BAL101',
-                               date=to_datetime('2020-11-01 00:00:00.000'),
-                               count=348),
-            AtvesTrafficCounts(location_code='BAL101',
-                               date=to_datetime('2020-11-02 00:00:00.000'),
-                               count=52),
-            AtvesTrafficCounts(location_code='BAL102',
-                               date=to_datetime('2020-11-01 00:00:00.000'),
-                               count=33),
-            ])
-    return conn_str
+    return 'sqlite:///{}'.format(str(tmp_path_factory.mktemp('data') / 'atves.db'))
 
 
 @pytest.fixture(name='reset_database')
