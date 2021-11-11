@@ -589,10 +589,10 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
 def parse_args(_args):
     """Handles the argument parsing"""
     parser = setup_parser('Data importer from the ATVES data providers')
-    start_date = date.today() - timedelta(days=365)
+    start_date = date.today() - timedelta(days=90)
     end_date = date.today() - timedelta(days=1)
     parser.add_argument('-s', '--startdate', type=date.fromisoformat, default=start_date,
-                        help='First date to process, inclusive (format YYYY-MM-DD). Defaults to 365 days ago')
+                        help='First date to process, inclusive (format YYYY-MM-DD). Defaults to 90 days ago')
     parser.add_argument('-e', '--enddate', type=date.fromisoformat, default=end_date,
                         help='Last date to process, inclusive (format YYYY-MM-DD). Defaults to yesterday.')
     parser.add_argument('-b', '--builddb', action='store_true',
