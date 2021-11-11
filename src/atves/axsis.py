@@ -11,6 +11,7 @@ import xlrd  # type: ignore
 from bs4 import BeautifulSoup  # type: ignore
 from loguru import logger
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
+from typing import List
 from urllib3 import util  # type: ignore
 
 from atves.axsis_types import ReportsDetailType
@@ -130,7 +131,7 @@ class Axsis:
         :return: Pandas data frame with the resulting data
         """
         delta = (end_date - start_date).days
-        ret = []
+        ret: List[pd.dataframe] = []
         if delta > 0:
             for i in range(delta + 1):
                 cur_date = start_date + timedelta(days=i)
