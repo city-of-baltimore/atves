@@ -85,6 +85,7 @@ def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_cred
         ret = session.query(AtvesCamLocations.effective_date).filter(AtvesCamLocations.location_code == 'BAL100')
         assert not ret.all()[0][0]
 
+        # Test the logic to use the violations to get the start date
         session.add_all([
             AtvesViolationCategories(
                 violation_cat=1,
@@ -115,6 +116,23 @@ def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_cred
         assert ret.all()[0][0] == date(2020, 1, 1)
 
         ret = session.query(AtvesCamLocations.effective_date).filter(AtvesCamLocations.location_code == 'BAL101')
+        assert not ret.all()[0][0]
+
+        # Test the logic to use traffic counts to determine the start date
+        session.add_all([
+            AtvesTrafficCounts(
+                location_code='BAL102',
+                date=to_datetime('2020-02-01 00:00:00.000'),
+                count=500
+            )
+        ])
+        session.commit()
+
+        atvesdb_fixture.build_location_db(True)
+        ret = session.query(AtvesCamLocations.effective_date).filter(AtvesCamLocations.location_code == 'BAL102')
+        assert ret.all()[0][0] == date(2020, 2, 1)
+
+        ret = session.query(AtvesCamLocations.effective_date).filter(AtvesCamLocations.location_code == 'BAL103')
         assert not ret.all()[0][0]
 
 

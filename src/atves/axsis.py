@@ -3,7 +3,7 @@ import ast
 from datetime import date, timedelta
 from enum import Enum
 from io import BytesIO
-from typing import cast, Dict, Optional
+from typing import cast, Dict, List, Optional
 
 import pandas as pd  # type: ignore
 import requests
@@ -11,7 +11,6 @@ import xlrd  # type: ignore
 from bs4 import BeautifulSoup  # type: ignore
 from loguru import logger
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
-from typing import List
 from urllib3 import util  # type: ignore
 
 from atves.axsis_types import ReportsDetailType

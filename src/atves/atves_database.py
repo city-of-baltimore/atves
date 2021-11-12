@@ -203,7 +203,7 @@ class AtvesDatabase(DatabaseBaseClass):
 
                 if traffic_counts:
                     try:
-                        cam_date = datetime.strptime(traffic_counts[0][1], '%Y-%m-%d')
+                        cam_date = traffic_counts[0]
                     except IndexError:
                         pass
 
