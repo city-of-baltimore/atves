@@ -3,7 +3,7 @@ import ast
 from datetime import date, timedelta
 from enum import Enum
 from io import BytesIO
-from typing import cast, Dict, Optional
+from typing import cast, Dict, List, Optional
 
 import pandas as pd  # type: ignore
 import requests
@@ -130,7 +130,7 @@ class Axsis:
         :return: Pandas data frame with the resulting data
         """
         delta = (end_date - start_date).days
-        ret = []
+        ret: List[pd.dataframe] = []
         if delta > 0:
             for i in range(delta + 1):
                 cur_date = start_date + timedelta(days=i)

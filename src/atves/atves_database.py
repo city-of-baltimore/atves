@@ -203,7 +203,7 @@ class AtvesDatabase(DatabaseBaseClass):
 
                 if traffic_counts:
                     try:
-                        cam_date = datetime.strptime(traffic_counts[0][1], '%Y-%m-%d')
+                        cam_date = traffic_counts[0]
                     except IndexError:
                         pass
 
@@ -233,12 +233,17 @@ class AtvesDatabase(DatabaseBaseClass):
 
         return True
 
-    def process_conduent_data_amber_time(self, start_date: date, end_date: date) -> None:
+    def process_conduent_data_amber_time(self, start_date: date, end_date: date, build_loc_db: bool = True,
+                                         force: bool = False) -> None:
         """
+        Pulls the amber time report
 
         :param start_date: Start date of the report to pull
         :param end_date: End date of the report to pull
-        :return:
+        :param build_loc_db: If true, then it will rebuild the location db even if it was already built this session
+        :param force: Pulls data on the whole range of dates; by default it skips dates that already have data in the
+        database
+        :return: None
         """
         logger.info('Processing conduent amber time report from {} to {}', start_date.strftime('%m/%d/%y'),
                     end_date.strftime('%m/%d/%y'))
@@ -248,8 +253,8 @@ class AtvesDatabase(DatabaseBaseClass):
                            'not setup.')
             return
 
-        self.build_location_db()
-        dates = self.get_dates_to_process(start_date, end_date, AtvesAmberTimeRejects.violation_date)
+        self.build_location_db(build_loc_db)
+        dates = self.get_dates_to_process(start_date, end_date, AtvesAmberTimeRejects.violation_date, force)
         for working_date in dates:
             if (data := self.conduent_interface.get_amber_time_rejects_report(working_date, working_date)).empty:
                 # no data
@@ -264,27 +269,29 @@ class AtvesDatabase(DatabaseBaseClass):
                     amber_reject_code=str(row['Amber Reject Code']),
                     event_number=int(row['Event Number'])))
 
-    def process_traffic_count_data(self, start_date: date, end_date: date) -> None:
+    def process_traffic_count_data(self, start_date: date, end_date: date, force: bool = False) -> None:
         """
         Processes the traffic count camera data from Axsis and Conduent
         :param start_date: Start date of the report to pull
         :param end_date: End date of the report to pull
+        :param force: Pulls data on the whole range of dates; by default it skips dates that already have data in the
+        database
         :return:
         """
         logger.info('Processing traffic count data from {} to {}', start_date.strftime('%m/%d/%y'),
                     end_date.strftime('%m/%d/%y'))
 
         self.build_location_db()
-        self._process_traffic_count_data_axsis(start_date, end_date)
-        self._process_traffic_count_data_conduent(start_date, end_date)
+        self._process_traffic_count_data_axsis(start_date, end_date, force)
+        self._process_traffic_count_data_conduent(start_date, end_date, force)
 
-    def _process_traffic_count_data_axsis(self, start_date: date, end_date: date) -> None:
+    def _process_traffic_count_data_axsis(self, start_date: date, end_date: date, force: bool = False) -> None:
         if not self.axsis_interface:
             logger.warning('Unable to run _process_traffic_count_data_axsis. It requires a Axsis session, which is not '
                            'setup.')
             return
 
-        dates = self.get_dates_to_process(start_date, end_date, AtvesTrafficCounts.date)
+        dates = self.get_dates_to_process(start_date, end_date, AtvesTrafficCounts.date, force)
         for working_date in dates:
             if (data := self.axsis_interface.get_traffic_counts(working_date, working_date)).empty:
                 # no data
@@ -300,13 +307,13 @@ class AtvesDatabase(DatabaseBaseClass):
                                                                   date=datetime.strptime(event_date, '%m/%d/%Y').date(),
                                                                   count=int(row[event_date])))
 
-    def _process_traffic_count_data_conduent(self, start_date: date, end_date: date) -> None:
+    def _process_traffic_count_data_conduent(self, start_date: date, end_date: date, force: bool = False) -> None:
         if not self.conduent_interface:
             logger.warning('Unable to run _process_traffic_count_data_conduent. It requires a Conduent '
                            'session, which is not setup.')
             return
 
-        dates = self.get_dates_to_process(start_date, end_date, AtvesTrafficCounts.date)
+        dates = self.get_dates_to_process(start_date, end_date, AtvesTrafficCounts.date, force)
         for working_date in dates:
             if (data := self.conduent_interface.get_traffic_counts_by_location(working_date, working_date)).empty:
                 # no data
@@ -317,11 +324,13 @@ class AtvesDatabase(DatabaseBaseClass):
                                                           date=row['Ddate'],
                                                           count=int(row['VehPass'])))
 
-    def process_violations(self, start_date: date, end_date: date) -> None:
+    def process_violations(self, start_date: date, end_date: date, force: bool = False) -> None:
         """
         Processes the camera violations from Axsis and Conduent
         :param start_date: Start date of the report to pull
         :param end_date: End date of the report to pull
+        :param force: Pulls data on the whole range of dates; by default it skips dates that already have data in the
+        database
         :return:
         """
         logger.info('Processing violation data from {} to {}', start_date.strftime('%m/%d/%y'),
@@ -330,14 +339,14 @@ class AtvesDatabase(DatabaseBaseClass):
         self.build_location_db()
         self.build_violation_lookup_db()
 
-        dates = self.get_dates_to_process(start_date, end_date, AtvesViolations.date)
+        dates = self.get_dates_to_process(start_date, end_date, AtvesViolations.date, force)
         for working_date in dates:
             self._process_violations_axsis(working_date, working_date)
             self._process_violations_conduent(working_date, working_date)
 
     def _process_violations_axsis(self, start_date: date, end_date: date) -> None:
         if not self.axsis_interface:
-            logger.warning('Unable to run _process_traffic_count_data_axsis. It requires a Axsis session, which is not '
+            logger.warning('Unable to run _process_violations_axsis. It requires a Axsis session, which is not '
                            'setup.')
             return
 
@@ -392,8 +401,8 @@ class AtvesDatabase(DatabaseBaseClass):
         }
 
         if not self.conduent_interface:
-            logger.warning('Unable to run _process_traffic_count_data_conduent. It requires a Conduent '
-                           'session, which is not setup.')
+            logger.warning('Unable to run _process_violations_conduent. It requires a Conduent session, which is not '
+                           'setup.')
             return
 
         if cam_type == ALLCAMS:
@@ -417,14 +426,17 @@ class AtvesDatabase(DatabaseBaseClass):
                                                    violation_cat=violation_lookup[row['iOrderBy']],
                                                    details=str(row['vcDescription'])))
 
-    def process_financials(self, start_date: date, end_date: date, cam_type: int = ALLCAMS) -> None:
+    def process_financials(self, start_date: date, end_date: date, cam_type: int = ALLCAMS,
+                           force: bool = False) -> None:
         """
         Get the financial data for the ATVES program
         :param start_date: First date (inclusive) to process
         :param end_date: Last date (inclusive) to process
-        :param cam_type:
+        :param cam_type: Indicates the camera type to pull, from `atves.constants`
+        :param force: Pulls data on the whole range of dates; by default it skips dates that already have data in the
+        database
         """
-        dates = self.get_dates_to_process(start_date, end_date, AtvesFinancial.ledger_posting_date)
+        dates = self.get_dates_to_process(start_date, end_date, AtvesFinancial.ledger_posting_date, force)
         for working_date in dates:
             if cam_type in [ALLCAMS, OVERHEIGHT]:
                 self._process_overheight_financials(working_date, working_date)
@@ -577,10 +589,10 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
 def parse_args(_args):
     """Handles the argument parsing"""
     parser = setup_parser('Data importer from the ATVES data providers')
-    start_date = date.today() - timedelta(days=365)
+    start_date = date.today() - timedelta(days=90)
     end_date = date.today() - timedelta(days=1)
     parser.add_argument('-s', '--startdate', type=date.fromisoformat, default=start_date,
-                        help='First date to process, inclusive (format YYYY-MM-DD). Defaults to 365 days ago')
+                        help='First date to process, inclusive (format YYYY-MM-DD). Defaults to 90 days ago')
     parser.add_argument('-e', '--enddate', type=date.fromisoformat, default=end_date,
                         help='Last date to process, inclusive (format YYYY-MM-DD). Defaults to yesterday.')
     parser.add_argument('-b', '--builddb', action='store_true',
@@ -604,8 +616,8 @@ if __name__ == '__main__':
                        report_user=REPORT_USERNAME,
                        report_pass=REPORT_PASSWORD)
 
-    ad.process_traffic_count_data(args.startdate, args.enddate)
-    ad.process_violations(args.startdate, args.enddate)
-    ad.process_financials(args.startdate, args.enddate)
-    ad.process_conduent_data_amber_time(args.startdate, args.enddate)
+    ad.process_traffic_count_data(args.startdate, args.enddate, force=args.force)
+    ad.process_violations(args.startdate, args.enddate, force=args.force)
+    ad.process_financials(args.startdate, args.enddate, force=args.force)
+    ad.process_conduent_data_amber_time(args.startdate, args.enddate, force=args.force)
     ad.build_location_db(args.builddb)
