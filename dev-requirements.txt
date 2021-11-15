@@ -1,13 +1,13 @@
-virtualenv~=20.4.7
-pip~=21.1.2
-wheel~=0.36.2
-pylint~=2.8.3
-flake8~=3.9.2
-bandit~=1.7.0
-mypy~=0.902
-pytest~=6.2.4
-pytest-cov~=2.12.1
-tox~=3.23.1
+virtualenv
+pip
+wheel
+pylint
+flake8
+bandit
+mypy
+pytest
+pytest-cov
+tox
 
-types-requests~=0.1.11
-types-retry~=0.1.2
+types-requests
+types-retry

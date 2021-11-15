@@ -19,8 +19,8 @@ from sqlalchemy.engine import Engine  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 
 from atves.constants import ALLCAMS, REDLIGHT, OVERHEIGHT, SPEED
-from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFinancial, AtvesTrafficCounts, \
-    AtvesViolations, AtvesViolationCategories, Base
+from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFinancial, AtvesRejectReason, \
+    AtvesTrafficCounts, AtvesViolations, AtvesViolationCategories, Base
 from atves.axsis import Axsis
 from atves.conduent import Conduent
 from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDUENT_PASSWORD, REPORT_USERNAME, \
@@ -487,7 +487,7 @@ class AtvesDatabase(DatabaseBaseClass):
         for acct in ['A00119320300000', '100169700600351', '100169701300325']:
             self._insert_financials_by_account(acct, start_date, end_date)
 
-    def _insert_financials_by_account(self, account, start_date, end_date):
+    def _insert_financials_by_account(self, account: str, start_date: date, end_date: date) -> None:
         if not self.conduent_interface:
             logger.warning('Unable to insert financial data. It requires a reports session, which is not setup.')
             return
@@ -514,6 +514,30 @@ class AtvesDatabase(DatabaseBaseClass):
                 account_description=row['AccountDescription'],
                 account_type=row['AccountType'],
                 agency_or_category=row['AgencyOrCategory']))
+
+    def process_officer_actions(self, start_date: date, end_date: date) -> None:
+        """
+        Inserts the citation rejection information into the database
+        :param start_date: First date (inclusive) to process
+        :param end_date: Last date (inclusive) to process
+        """
+        if not self.axsis_interface:
+            logger.warning('Unable to run _process_violations_axsis. It requires a Axsis session, which is not '
+                           'setup.')
+            return
+
+        if (data := self.axsis_interface.get_location_summary_by_lane(start_date, end_date)).empty:
+            # no data
+            return
+
+        for _, row in data['1'].iterrows():
+            self._insert_or_update(AtvesRejectReason(
+                date=row['Date'],
+                reject_reason=row['Reject Reason Factors'],
+                pd_review=row['PD Review'],
+                supervisor_review=row['Supervisor Review'],
+                total=row['Total Count']
+            ))
 
     def get_lat_long(self, address) -> Tuple[Optional[float], Optional[float]]:
         """

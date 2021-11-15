@@ -243,7 +243,7 @@ class Axsis:
         }
 
         reasons = pd.read_excel(response.content, header=1, skipfooter=1, sheet_name=[1])[1]
-        reasons['date'] = start_date
+        reasons['Date'] = start_date
 
         return {'0': pd.read_excel(response.content, parse_dates=['Action Date'], dtype=dtypes, header=1, skipfooter=1,
                                    names=['Action Date', 'Queue', 'Officer Name', 'Reviewed', 'Accepted', 'Rejected',
