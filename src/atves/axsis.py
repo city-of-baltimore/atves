@@ -26,6 +26,7 @@ class Reports(Enum):
     """Defines used for Axsis._get_report"""
     TRAFFIC_COUNTS = 1
     LOCATION_SUMMARY = 2
+    OFFICER_ACTION = 3
 
 
 def log_and_validate_params(func):
@@ -67,6 +68,10 @@ class Axsis:
             Reports.LOCATION_SUMMARY: {
                 'desc': 'LOCATION PERFORMANCE SUMMARY BY LANE -- XML',
                 'filename': 'REPORT_LPSL.XML',
+            },
+            Reports.OFFICER_ACTION: {
+                'desc': 'OFFICER ACTION',
+                'filename': '/EnterpriseReportingServices/Customer Reports/Officer Action'
             }
         }
 
@@ -194,6 +199,56 @@ class Axsis:
         }
         dataframe['Date'] = start_date
         return dataframe.groupby(dataframe['Location Code']).aggregate(agg)
+
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=(retry_if_exception_type(requests.exceptions.ConnectionError) |
+                  retry_if_exception_type(xlrd.biffh.XLRDError)))
+    def get_officer_actions(self, start_date: date, end_date: date) -> Dict[str, pd.DataFrame]:
+        """
+        Get the 'officer actions' report to get the outcome of violations
+        :param start_date: First date to search, inclusive
+        :param end_date: Last date to search, inclusive
+        :return: Dictionary of two dataframes; one is a pandas dataframe of the officer action report and the other is
+        a pandas dataframe of the reject reason summary. The officer action report is index '0' and the reject reason
+        summary is index '1'
+        """
+        delta = (end_date - start_date).days
+        ret_actions: List[pd.dataframe] = []
+        ret_reasons: List[pd.dataframe] = []
+        if delta > 0:
+            for i in range(delta + 1):
+                cur_date = start_date + timedelta(days=i)
+                ret = self.get_officer_actions(cur_date, cur_date)
+                ret_actions.append(ret['0'])
+                ret_reasons.append(ret['1'])
+            return {'0': pd.concat(ret_actions), '1': pd.concat(ret_reasons)}
+
+        parameters: Optional[ReportsDetailType] = self.get_reports_detail("OFFICER ACTION")
+        if not parameters:
+            logger.error("Unable to get location summary by lane")
+            return pd.DataFrame()
+
+        parameters['Parameters'][1]["ParmValue"] = start_date.strftime("%m/%d/%Y")
+        parameters['Parameters'][2]["ParmValue"] = end_date.strftime("%m/%d/%Y")
+
+        response = self._get_report(parameters, Reports.OFFICER_ACTION)
+        dtypes = {
+            'Queue': str,
+            'Officer Name': str,
+            'Reviewed': int,
+            'Accepted': int,
+            'Rejected': int,
+            'Percent Accepted': float,
+            'Percent Rejected': float
+        }
+
+        reasons = pd.read_excel(response.content, header=1, skipfooter=1, sheet_name=[1])[1]
+        reasons['date'] = start_date
+
+        return {'0': pd.read_excel(response.content, parse_dates=['Action Date'], dtype=dtypes, header=1, skipfooter=1,
+                                   names=['Action Date', 'Queue', 'Officer Name', 'Reviewed', 'Accepted', 'Rejected',
+                                          'Percent Accepted', 'Percent Rejected']),
+                '1': reasons}
 
     @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
            retry=retry_if_exception_type(requests.exceptions.ConnectionError))

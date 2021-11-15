@@ -47,3 +47,15 @@ def test_get_location_info(axsis_fixture):
     assert axsis_fixture.get_location_info('BAL103') == '6000 BLK HILLEN RD SB'
     assert axsis_fixture.get_location_info('BALP111') == '2800 BLK LOCH RAVEN NB'
     assert axsis_fixture.get_location_info('INVALID') is None
+
+
+def test_get_officer_actions(axsis_fixture):
+    """Test suite get_officer_actions"""
+    res = axsis_fixture.get_officer_actions(date(2021, 11, 1), date(2021, 11, 2))
+    assert date(2021, 11, 1) in res['1']['date'].unique()[0]
+    assert date(2021, 11, 2) in res['1']['date'].unique()[0]
+    assert len(res['1']['date'].unique())
+
+    assert date(2021, 11, 1) in res['0']['Action Date'].unique()[0]
+    assert date(2021, 11, 2) in res['0']['Action Date'].unique()[0]
+    assert len(res['0']['Action Date'].unique())
