@@ -24,7 +24,7 @@ class Conduent:
         :param username: Login to conduent account
         :param password: Password to conduent account
         """
-        logger.debug("Creating interface with conduent ({})", username)
+        logger.debug('Creating interface with conduent ({})', username)
         self.session = requests.Session()
         self._state_vals: SessionStateType = {'__VIEWSTATE': None,
                                               '__VIEWSTATEGENERATOR': None,
@@ -53,9 +53,9 @@ class Conduent:
 
         resp = self.session.post('https://cw3.cite-web.com/loginhub/Main.aspx', data=payload)
         self._get_state_values(resp)
-        soup = BeautifulSoup(resp.text, "html.parser")
+        soup = BeautifulSoup(resp.text, 'html.parser')
         if len(soup.find_all('input', {'name': 'txtOTP'})) != 1:
-            raise AssertionError("Login failure with Conduent")
+            raise AssertionError('Login failure with Conduent')
 
     @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
            retry=retry_if_exception_type(requests.exceptions.ConnectionError))
@@ -81,7 +81,7 @@ class Conduent:
                                  headers={'referer': 'https://cw3.cite-web.com/loginhub/Main.aspx'})
         self._get_state_values(resp)
 
-        self.session.get('https://cw3.cite-web.com/loginhub/Select.aspx?ID={}'.format(self.session_id),
+        self.session.get(f'https://cw3.cite-web.com/loginhub/Select.aspx?ID={self.session_id}',
                          headers={'referer': 'https://cw3.cite-web.com/loginhub/Main.aspx'})
 
     def _get_state_values(self, resp: requests.Response) -> None:
@@ -89,22 +89,22 @@ class Conduent:
         Gets the ASP.net state values from the hidden fields and populates them in self._state_vals
         :param resp: Response object
         """
-        soup = BeautifulSoup(resp.text, "html.parser")
+        soup = BeautifulSoup(resp.text, 'html.parser')
 
         # Get the ID that is used throughout the session
         id_tags = soup.find_all('input', {'value': 'Citeweb3'})
         if len(id_tags) > 0:
             if len(id_tags) != 1:
-                logger.warning("Expected only one id tag, but found multiple: {}", id_tags)
-            pattern = re.compile(r"ID=(\d*)")
+                logger.warning('Expected only one id tag, but found multiple: {}', id_tags)
+            pattern = re.compile(r'ID=(\d*)')
             session_id = pattern.search(str(id_tags[0]))
             if session_id is None:
-                raise AssertionError("Expected 'ID=' in response. Got {}".format(pattern))
+                raise AssertionError(f'Expected "ID=" in response. Got {pattern}')
 
             self.session_id = session_id.group(1)
 
         # get all state variables
-        hidden_tags = soup.find_all("input", type="hidden")
+        hidden_tags = soup.find_all('input', type='hidden')
         tags = {}
         for tag in hidden_tags:
             if tag.get('value') and tag.get('name'):
@@ -141,24 +141,24 @@ class Conduent:
         elif cam_type == OVERHEIGHT:
             self._setup_report_request(OVERHEIGHT)
         else:
-            raise AssertionError('Cam type {} is not valid'.format(cam_type))
+            raise AssertionError(f'Cam type {cam_type} is not valid'.format())
 
-        resp = self.session.get('https://cw3.cite-web.com/citeweb3/locationByID.asp?ID={}'.format(loc_id))
+        resp = self.session.get(f'https://cw3.cite-web.com/citeweb3/locationByID.asp?ID={loc_id}')
         if resp.status_code == 500:
-            logger.error('Got HTTP response code {}'.format(resp.status_code))
+            logger.error(f'Got HTTP response code {resp.status_code}')
             return ret
 
-        soup = BeautifulSoup(resp.text, "html.parser")
+        soup = BeautifulSoup(resp.text, 'html.parser')
         if soup.select_one('p:-soup-contains("No location exists with the selected ID!")') is not None:
-            logger.info("No location for ID {}", loc_id)
+            logger.info('No location for ID {}', loc_id)
             return ret
 
         effective_date = soup.select_one('p:-soup-contains("Effective Date")')
         if not effective_date:
-            logger.error("Unable to find Effective Date in HTTP response")
+            logger.error('Unable to find Effective Date in HTTP response')
             return ret
 
-        text = effective_date.get_text().replace(u'\xa0', ' ')
+        text = effective_date.get_text().replace('\xa0', ' ')
 
         cam_type_str = ''
         if soup.select_one('p:-soup-contains("BaltimoreRL")'):
@@ -170,7 +170,7 @@ class Conduent:
                              r'(.*?)\s\s*Effective Date: (.*?)\s\s*Speed Limit: (\d*)\s\s*Status: (\w*)')
         results = pattern.search(text)
         if results is None:
-            logger.error('Unable to find expected camera data in HTTP response: {}'.format(text))
+            logger.error(f'Unable to find expected camera data in HTTP response: {text}')
             return ret
 
         return {'site_code': results.group(1),
@@ -193,17 +193,17 @@ class Conduent:
         self._setup_report_request(OVERHEIGHT)
 
         # set the request up; we have to do this first
-        report_url = "https://cw3.cite-web.com/citeweb3/UnivReports.asp?Server={}&Database={}".format(
-            self.deployment_server, 'BaltimoreOH')
-        self.session.get(report_url,
-                         headers={'referer': 'https://cw3.cite-web.com/citeweb3/citmenu.asp?DB={}&Site=Maryland'.format(
-                             'BaltimoreOH')})
+        report_url = f'https://cw3.cite-web.com/citeweb3/UnivReports.asp?' \
+                     f'Server={self.deployment_server}&Database=BaltimoreOH'
+        self.session.get(
+            report_url, headers={'referer':
+                                 'https://cw3.cite-web.com/citeweb3/citmenu.asp?DB=BaltimoreOH&Site=Maryland'})
 
         # generate the report request
         payload = {
             'lstReportList': '5575,307,Approval By Review Date - Details,1,false,true'
         }
-        resp = self.session.post("https://cw3.cite-web.com/citeweb3/univReports.asp",
+        resp = self.session.post('https://cw3.cite-web.com/citeweb3/univReports.asp',
                                  data=payload,
                                  headers={'referer': report_url})
         soup = BeautifulSoup(resp.text, 'html.parser')
@@ -221,7 +221,7 @@ class Conduent:
             atves.ALLCAMS (default: atves.ALLCAMS)
         :return: (list of dictionaries) Results with id, start_time, end_time, location, equip_type, accepted, rejected
         """
-        logger.info("Getting deployment information for {} - {} and cam type {}", start_date, end_date, cam_type)
+        logger.info('Getting deployment information for {} - {} and cam type {}', start_date, end_date, cam_type)
 
         if cam_type == ALLCAMS:
             ret = self._get_deployment_data(start_date, end_date, REDLIGHT)
@@ -260,7 +260,7 @@ class Conduent:
         :return: pandas.core.frame.DataFrame
         """
         if cam_type not in [REDLIGHT, OVERHEIGHT]:
-            raise AssertionError("Cam type {} is unexpected".format(cam_type))
+            raise AssertionError(f'Cam type {cam_type} is unexpected')
         if cam_type == REDLIGHT:
             report = '5575,302,Approval By Review Date - Details,1,false,true'
         else:
@@ -300,7 +300,7 @@ class Conduent:
         :return: pandas.core.frame.DataFrame
         """
         if cam_type not in [REDLIGHT, OVERHEIGHT, ALLCAMS]:
-            raise AssertionError("Cam type {} is unexpected".format(cam_type))
+            raise AssertionError(f'Cam type {cam_type} is unexpected')
 
         if cam_type == REDLIGHT:
             report = '5532,302,Approval Summary By Queue,1,false,true'
@@ -328,7 +328,7 @@ class Conduent:
         :return: pandas.core.frame.DataFrame
         """
         if cam_type not in [REDLIGHT, OVERHEIGHT, ALLCAMS]:
-            raise AssertionError("Cam type {} is unexpected".format(cam_type))
+            raise AssertionError(f'Cam type {cam_type} is unexpected')
 
         if cam_type == ALLCAMS:
             rep_rl = self.get_client_summary_by_location(start_date, end_date, cam_type=REDLIGHT)
@@ -348,8 +348,8 @@ class Conduent:
         while working_date <= end_date:
             data = self.get_report(report,
                                    cam_type,
-                                   input_params={'TextBox0': working_date.strftime("%m/%d/%y"),
-                                                 'TextBox1': working_date.strftime("%m/%d/%y"),
+                                   input_params={'TextBox0': working_date.strftime('%m/%d/%y'),
+                                                 'TextBox1': working_date.strftime('%m/%d/%y'),
                                                  'ComboBox0': location},
                                    scrape_params=['hTextBoxTempo_Id0', 'hTextBoxTempo_Id1', 'hComboBoxTempo_Id0',
                                                   'hComboBoxTempo_String0', 'hTextBoxCount', 'hComboBoxCount'])
@@ -473,7 +473,7 @@ class Conduent:
         :return: pandas.core.frame.DataFrame
         """
         if cam_type not in [REDLIGHT, OVERHEIGHT]:
-            raise AssertionError("Cam type {} is unexpected".format(cam_type))
+            raise AssertionError(f'Cam type {cam_type} is unexpected')
 
         if cam_type == REDLIGHT:
             report = '5579,302,Pending Client Approval,1,false,true'
@@ -507,20 +507,20 @@ class Conduent:
         self._setup_report_request(cam_type)
 
         # set the request up; we have to do this first
-        report_url = "https://cw3.cite-web.com/citeweb3/UnivReports.asp?Server={}&Database={}".format(
-            self.deployment_server, cam_val)
+        report_url = f'https://cw3.cite-web.com/citeweb3/UnivReports.asp?' \
+                     f'Server={self.deployment_server}&Database={cam_val}'
         self.session.get(report_url,
-                         headers={'referer': 'https://cw3.cite-web.com/citeweb3/citmenu.asp?DB={}&Site=Maryland'.format(
-                             cam_val)})
+                         headers={'referer':
+                                  f'https://cw3.cite-web.com/citeweb3/citmenu.asp?DB={cam_val}&Site=Maryland'})
 
         # generate the report request
         payload = {
             'lstReportList': report_type
         }
-        resp = self.session.post("https://cw3.cite-web.com/citeweb3/univReports.asp",
+        resp = self.session.post('https://cw3.cite-web.com/citeweb3/univReports.asp',
                                  data=payload,
                                  headers={'referer': report_url})
-        soup = BeautifulSoup(resp.text, "html.parser")
+        soup = BeautifulSoup(resp.text, 'html.parser')
 
         payload = {
             'hReportID': soup.find('input', {'name': 'hReportID'}).get('value'),
@@ -547,26 +547,26 @@ class Conduent:
         resp = self.session.post('https://cw3.cite-web.com/citeweb3/univReports.asp',
                                  data=payload,
                                  headers={'referer': 'https://cw3.cite-web.com/citeweb3/univReports.asp'})
-        soup = BeautifulSoup(resp.text, "html.parser")
+        soup = BeautifulSoup(resp.text, 'html.parser')
         pattern = re.compile(r'/media/.*\.csv')
         try:
             getreport = soup.find('a', {'name': 'aGetReport'})
             if not getreport:
-                logger.error('Unable to find "<a name="aGetReport..." tag in {}'.format(soup))
+                logger.error(f'Unable to find "<a name="aGetReport..." tag in {soup}')
                 return None
 
             onclick = pattern.search(getreport.get('onclick'))
             if not onclick:
-                logger.error('Unable to find onclick element of <a name="aGetReport".. in \n{}'.format(getreport))
+                logger.error(f'Unable to find onclick element of <a name="aGetReport".. in \n{getreport}')
                 return None
 
         except IndexError:
-            logger.error("There was an error with error generation. No file was generated. HTML output:\n\n")
+            logger.error('There was an error with error generation. No file was generated. HTML output:\n\n')
             logger.debug(resp.text)
             return None
 
         # download the file and return it
-        return pd.read_csv('https://cw3.cite-web.com{}'.format(onclick.group(0)), parse_dates=parse_dates)
+        return pd.read_csv(f'https://cw3.cite-web.com{onclick.group(0)}', parse_dates=parse_dates)
 
     def _get_deployment_server(self, resp: requests.Response) -> None:
         """
@@ -574,8 +574,8 @@ class Conduent:
         :param resp: requests.models.Response
         :return: None
         """
-        soup = BeautifulSoup(resp.text, "html.parser")
-        results = [i.attrs.get('href') for i in soup.find_all('a') if i.text == "Reports"]
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        results = [i.attrs.get('href') for i in soup.find_all('a') if i.text == 'Reports']
         for result in results:
             url = urllib.parse.urlparse(result)
             server_val = urllib.parse.parse_qs(url.query).get('Server')
@@ -599,11 +599,10 @@ class Conduent:
         else:
             raise AssertionError
 
-        self.session.get('https://cw3.cite-web.com/citeweb3/Default.asp?ID={}'.format(self.session_id),
-                         headers={'referer': 'https://cw3.cite-web.com/loginhub/Select.aspx?ID={}'.format(
-                             self.session_id)})
+        self.session.get(f'https://cw3.cite-web.com/citeweb3/Default.asp?ID={self.session_id}',
+                         headers={'referer': f'https://cw3.cite-web.com/loginhub/Select.aspx?ID={self.session_id}'})
 
-        resp = self.session.get('https://cw3.cite-web.com/citeweb3/citmenu.asp?DB={}&Site=Maryland'.format(cookie_val),
+        resp = self.session.get(f'https://cw3.cite-web.com/citeweb3/citmenu.asp?DB={cookie_val}&Site=Maryland',
                                 headers={'referer': 'https://cw3.cite-web.com/citeweb3/newmenu.asp'})
 
         if self.deployment_server is None:
@@ -621,7 +620,7 @@ class Conduent:
                              cam_type) -> List[ConduentResultsType]:
         """ Pull the data from the deployment section"""
         if cam_type not in [REDLIGHT, OVERHEIGHT]:
-            raise AssertionError("Cam type {} is unexpected".format(cam_type))
+            raise AssertionError(f'Cam type {cam_type} is unexpected')
 
         self._setup_report_request(cam_type)
 
@@ -633,11 +632,10 @@ class Conduent:
                                                          search_end_date.month,
                                                          search_end_date.year):
             resp = self.session.get(
-                'https://cw3.cite-web.com/citeweb3/{}?Month={}&Year={}'.format(deploy_type[cam_type],
-                                                                               calendar.month_name[cur_month],
-                                                                               cur_year))
-            soup = BeautifulSoup(resp.text, "html.parser")
-            table = soup.find("table", {"class": "detail"}, border=1)
+                f'https://cw3.cite-web.com/citeweb3/{deploy_type[cam_type]}?'
+                f'Month={calendar.month_name[cur_month]}&Year={cur_year}')
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            table = soup.find('table', {'class': 'detail'}, border=1)
 
             if not table:
                 return results
@@ -645,25 +643,25 @@ class Conduent:
             for row in table.find_all('tr'):
                 elements = row.find_all('td')
                 if len(elements) != 8:
-                    logger.debug("Skipping {}", elements)
+                    logger.debug('Skipping {}', elements)
                     continue
 
                 if hasattr(elements[1].p, 'text') and hasattr(elements[2].p, 'text') and \
                         elements[1].p.text and elements[2].p.text:
 
-                    act_start_date = datetime.strptime(elements[1].p.text, "%b %d, %Y %H:%M:%S")
-                    act_end_date = datetime.strptime(elements[2].p.text, "%b %d, %Y %H:%M:%S")
+                    act_start_date = datetime.strptime(elements[1].p.text, '%b %d, %Y %H:%M:%S')
+                    act_end_date = datetime.strptime(elements[2].p.text, '%b %d, %Y %H:%M:%S')
                     # Make sure we are within the date range
                     if act_start_date.date() >= search_start_date and act_end_date.date() <= search_end_date:
                         results.append({
-                            'id': "" if not elements[0].p else elements[0].a.text,
+                            'id': '' if not elements[0].p else elements[0].a.text,
                             'start_time': act_start_date,
                             'end_time': act_end_date,
-                            'location': "" if not elements[3].p else elements[3].p.text,
-                            'officer': "" if not elements[4].p else elements[4].p.text,
-                            'equip_type': "" if not elements[5].p else elements[5].p.text,
-                            'issued': "" if not elements[6].p else elements[6].p.text,
-                            'rejected': "" if not elements[7].p else elements[7].p.text
+                            'location': '' if not elements[3].p else elements[3].p.text,
+                            'officer': '' if not elements[4].p else elements[4].p.text,
+                            'equip_type': '' if not elements[5].p else elements[5].p.text,
+                            'issued': '' if not elements[6].p else elements[6].p.text,
+                            'rejected': '' if not elements[7].p else elements[7].p.text
                         })
 
         return results
@@ -687,4 +685,4 @@ class Conduent:
 
     @staticmethod
     def _convert_start_end_dates(start_date: date, end_date: date) -> Tuple[str, str]:
-        return start_date.strftime("%m/%d/%Y"), end_date.strftime("%m/%d/%Y")
+        return start_date.strftime('%m/%d/%Y'), end_date.strftime('%m/%d/%Y')

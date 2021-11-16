@@ -19,8 +19,8 @@ from sqlalchemy.engine import Engine  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 
 from atves.constants import ALLCAMS, REDLIGHT, OVERHEIGHT, SPEED
-from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFinancial, AtvesTrafficCounts, \
-    AtvesViolations, AtvesViolationCategories, Base
+from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFinancial, AtvesRejectReason, \
+    AtvesTrafficCounts, AtvesViolations, AtvesViolationCategories, Base
 from atves.axsis import Axsis
 from atves.conduent import Conduent
 from atves.creds import AXSIS_USERNAME, AXSIS_PASSWORD, CONDUENT_USERNAME, CONDUENT_PASSWORD, REPORT_USERNAME, \
@@ -107,7 +107,7 @@ class AtvesDatabase(DatabaseBaseClass):
 
             diff = set(location_codes) - set(existing_location_codes)
             if diff:
-                raise AssertionError('Missing location codes: {}'.format(diff))
+                raise AssertionError('Missing location codes: {diff}')
 
         self.location_db_built = True
 
@@ -151,8 +151,6 @@ class AtvesDatabase(DatabaseBaseClass):
 
             try:
                 lat, lng = self.get_lat_long(ret['location'])
-                if not (lat or lng):
-                    continue
                 edate = None
                 if ret['effective_date'] is not None:
                     edate = datetime.strptime(ret['effective_date'], '%b %d, %Y')
@@ -260,7 +258,7 @@ class AtvesDatabase(DatabaseBaseClass):
                 # no data
                 return
 
-            for _, row in data.iterrows():
+            for _, row in data.iterrows():  # pylint:disable=no-member
                 self._insert_or_update(AtvesAmberTimeRejects(
                     location_code=int(row['iLocationCode']),
                     deployment_no=int(row['Deployment Number']),
@@ -319,7 +317,7 @@ class AtvesDatabase(DatabaseBaseClass):
                 # no data
                 return
 
-            for _, row in data.iterrows():
+            for _, row in data.iterrows():  # pylint:disable=no-member
                 self._insert_or_update(AtvesTrafficCounts(location_code=str(row['iLocationCode']).strip(),
                                                           date=row['Ddate'],
                                                           count=int(row['VehPass'])))
@@ -487,15 +485,15 @@ class AtvesDatabase(DatabaseBaseClass):
         for acct in ['A00119320300000', '100169700600351', '100169701300325']:
             self._insert_financials_by_account(acct, start_date, end_date)
 
-    def _insert_financials_by_account(self, account, start_date, end_date):
-        if not self.conduent_interface:
+    def _insert_financials_by_account(self, account: str, start_date: date, end_date: date) -> None:
+        if not self.financial_interface:
             logger.warning('Unable to insert financial data. It requires a reports session, which is not setup.')
             return
 
         if (data := self.financial_interface.get_general_ledger_detail(start_date, end_date, account, '55')).empty:
             # no data
             return
-        for _, row in data.iterrows():
+        for _, row in data.iterrows():  # pylint:disable=no-member
             self._insert_or_update(AtvesFinancial(
                 journal_entry_no=row['JournalEntryNo'],
                 ledger_posting_date=row['LedgerPostingDate'],
@@ -515,6 +513,33 @@ class AtvesDatabase(DatabaseBaseClass):
                 account_type=row['AccountType'],
                 agency_or_category=row['AgencyOrCategory']))
 
+    def process_officer_actions(self, start_date: date, end_date: date, force: bool = False) -> None:
+        """
+        Inserts the citation rejection information into the database
+        :param start_date: First date (inclusive) to process
+        :param end_date: Last date (inclusive) to process
+        :param force
+        """
+        if not self.axsis_interface:
+            logger.warning('Unable to run _process_violations_axsis. It requires a Axsis session, which is not '
+                           'setup.')
+            return
+
+        dates = self.get_dates_to_process(start_date, end_date, AtvesRejectReason.date, force)
+        for working_date in dates:
+            if (data := self.axsis_interface.get_officer_actions(working_date, working_date))['1'].empty:
+                # no data
+                return
+
+            for _, row in data['1'].iterrows():
+                self._insert_or_update(AtvesRejectReason(
+                    date=row['Date'],
+                    reject_reason=row['Reject Reason Factors'],
+                    pd_review=row['PD Review'],
+                    supervisor_review=row['Supervisor Review'],
+                    total=row['Total Count']
+                ))
+
     def get_lat_long(self, address) -> Tuple[Optional[float], Optional[float]]:
         """
         Get the latitude and longitude for an address if the accuracy score is high enough
@@ -523,10 +548,10 @@ class AtvesDatabase(DatabaseBaseClass):
         address = self._standardize_address(address)
         with warnings.catch_warnings():  # https://github.com/Esri/arcgis-python-api/issues/1090
             warnings.simplefilter("ignore")
-            geo_dict = geocode('{}, Baltimore, MD'.format(address))
+            geo_dict = geocode(f'{address}, Baltimore, MD')
         lat = None
         lng = None
-        if geo_dict and geo_dict[0]['score'] > 90:
+        if geo_dict and geo_dict[0]['score'] > 80:
             lat = float(geo_dict[0]['location']['y'])
             lng = float(geo_dict[0]['location']['x'])
         return lat, lng
@@ -620,4 +645,5 @@ if __name__ == '__main__':
     ad.process_violations(args.startdate, args.enddate, force=args.force)
     ad.process_financials(args.startdate, args.enddate, force=args.force)
     ad.process_conduent_data_amber_time(args.startdate, args.enddate, force=args.force)
+    ad.process_officer_actions(args.startdate, args.enddate, force=args.force)
     ad.build_location_db(args.builddb)

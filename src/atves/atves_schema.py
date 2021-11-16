@@ -46,6 +46,17 @@ class AtvesAmberTimeRejects(Base):
     event_number = Column(Integer, primary_key=True)
 
 
+class AtvesRejectReason(Base):
+    """get_officer_actions"""
+    __tablename__ = 'atves_rejections'
+
+    date = Column(Date, primary_key=True)
+    reject_reason = Column(String, primary_key=True)
+    pd_review = Column(Integer)
+    supervisor_review = Column(Integer)
+    total = Column(Integer)
+
+
 class AtvesViolations(Base):
     """Violation counts"""
     __tablename__ = 'atves_violations'
