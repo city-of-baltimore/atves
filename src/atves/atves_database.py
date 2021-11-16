@@ -107,7 +107,7 @@ class AtvesDatabase(DatabaseBaseClass):
 
             diff = set(location_codes) - set(existing_location_codes)
             if diff:
-                raise AssertionError('Missing location codes: {}'.format(diff))
+                raise AssertionError('Missing location codes: {diff}')
 
         self.location_db_built = True
 
@@ -515,20 +515,23 @@ class AtvesDatabase(DatabaseBaseClass):
                 account_type=row['AccountType'],
                 agency_or_category=row['AgencyOrCategory']))
 
-    def process_officer_actions(self, start_date: date, end_date: date) -> None:
+    def process_officer_actions(self, start_date: date, end_date: date, force: bool = False) -> None:
         """
         Inserts the citation rejection information into the database
         :param start_date: First date (inclusive) to process
         :param end_date: Last date (inclusive) to process
+        :param force
         """
         if not self.axsis_interface:
             logger.warning('Unable to run _process_violations_axsis. It requires a Axsis session, which is not '
                            'setup.')
             return
 
-        if (data := self.axsis_interface.get_location_summary_by_lane(start_date, end_date)).empty:
-            # no data
-            return
+        dates = self.get_dates_to_process(start_date, end_date, AtvesRejectReason.date, force)
+        for working_date in dates:
+            if (data := self.axsis_interface.get_officer_actions(working_date, working_date))['1'].empty:
+                # no data
+                return
 
         for _, row in data['1'].iterrows():
             self._insert_or_update(AtvesRejectReason(
@@ -644,4 +647,5 @@ if __name__ == '__main__':
     ad.process_violations(args.startdate, args.enddate, force=args.force)
     ad.process_financials(args.startdate, args.enddate, force=args.force)
     ad.process_conduent_data_amber_time(args.startdate, args.enddate, force=args.force)
+    ad.process_officer_actions(args.startdate, args.enddate, force=args.force)
     ad.build_location_db(args.builddb)

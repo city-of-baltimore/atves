@@ -92,7 +92,7 @@ def fixture_atvesdb_no_creds(conn_str):
 @pytest.fixture(scope='session', name='conn_str')
 def fixture_conn_str(tmp_path_factory):
     """Fixture for the WorksheetMaker class"""
-    return 'sqlite:///{}'.format(str(tmp_path_factory.mktemp('data') / 'atves.db'))
+    return f'sqlite:///{str(tmp_path_factory.mktemp("data") / "atves.db")}'
 
 
 @pytest.fixture(name='reset_database')

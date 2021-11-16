@@ -52,10 +52,10 @@ def test_get_location_info(axsis_fixture):
 def test_get_officer_actions(axsis_fixture):
     """Test suite get_officer_actions"""
     res = axsis_fixture.get_officer_actions(date(2021, 11, 1), date(2021, 11, 2))
-    assert f'{datetime(2021, 11, 2).isoformat(timespec="microseconds")}000' in res['1']['Date'].unique()
-    assert f'{datetime(2021, 11, 2).isoformat(timespec="microseconds")}000' in res['1']['Date'].unique()
-    assert len(res['1']['Date'].unique())
+    assert any(res['1']['Date'].isin([date(2021, 11, 1)]))
+    assert any(res['1']['Date'].isin([date(2021, 11, 2)]))
+    assert len(res['1']['Date'].unique()) == 2
 
-    assert f'{datetime(2021, 11, 1).isoformat(timespec="microseconds")}000' in res['0']['Action Date'].unique()
-    assert f'{datetime(2021, 11, 2).isoformat(timespec="microseconds")}000' in res['0']['Action Date'].unique()
-    assert len(res['0']['Action Date'].unique())
+    assert any(res['1']['Date'].isin([date(2021, 11, 1)]))
+    assert any(res['1']['Date'].isin([date(2021, 11, 2)]))
+    assert len(res['0']['Action Date'].unique()) == 2

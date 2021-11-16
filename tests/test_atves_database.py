@@ -270,13 +270,13 @@ def test_process_officer_actions(atvesdb_fixture, atvesdb_fixture_no_creds, conn
         ret = session.query(AtvesRejectReason)
         assert ret.count() == 0
 
-        atvesdb_fixture_no_creds.process_officer_actions(start_date=start_date, end_date=end_date)
+        atvesdb_fixture.process_officer_actions(start_date=start_date, end_date=end_date)
         ret = session.query(AtvesRejectReason)
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', category=sa_exc.SAWarning)
-            assert len([x.Date
+            assert len([x.date
                         for x in ret
-                        if x.Date > end_date or x.Date < start_date]) == 0
+                        if x.date > end_date or x.date < start_date]) == 0
         assert ret.count() > 10
 
 

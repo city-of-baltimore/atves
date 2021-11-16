@@ -1,6 +1,7 @@
 """Types used only for type checking in conduent.py"""
 # pylint:disable=too-few-public-methods
 # pylint:disable=inherit-non-class
+# pylint:disable=unused-private-member
 from typing import Optional, TypedDict
 from datetime import datetime
 

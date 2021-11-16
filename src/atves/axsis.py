@@ -313,8 +313,7 @@ class Axsis:
         list_of_cookies = requests.utils.dict_from_cookiejar(self.session.cookies)
         for cookie_name in ['idsrv', 'idsrv.session', 'f5-axsisweb-lb-cookie', '_mvc3authcougar']:
             if cookie_name not in list_of_cookies.keys():
-                raise AssertionError("Cookie {} not in list of valid cookie: {}".format(
-                    cookie_name, list_of_cookies.keys()))
+                raise AssertionError(f'Cookie {cookie_name} not in list of valid cookie: {list_of_cookies.keys()}')
 
     @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
            retry=retry_if_exception_type(requests.exceptions.ConnectionError))
