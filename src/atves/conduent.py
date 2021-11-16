@@ -197,7 +197,7 @@ class Conduent:
                      f'Server={self.deployment_server}&Database=BaltimoreOH'
         self.session.get(
             report_url, headers={'referer':
-                                     'https://cw3.cite-web.com/citeweb3/citmenu.asp?DB=BaltimoreOH&Site=Maryland'})
+                                 'https://cw3.cite-web.com/citeweb3/citmenu.asp?DB=BaltimoreOH&Site=Maryland'})
 
         # generate the report request
         payload = {
@@ -511,7 +511,7 @@ class Conduent:
                      f'Server={self.deployment_server}&Database={cam_val}'
         self.session.get(report_url,
                          headers={'referer':
-                                      f'https://cw3.cite-web.com/citeweb3/citmenu.asp?DB={cam_val}&Site=Maryland'})
+                                  f'https://cw3.cite-web.com/citeweb3/citmenu.asp?DB={cam_val}&Site=Maryland'})
 
         # generate the report request
         payload = {
