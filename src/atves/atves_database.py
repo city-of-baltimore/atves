@@ -488,7 +488,7 @@ class AtvesDatabase(DatabaseBaseClass):
             self._insert_financials_by_account(acct, start_date, end_date)
 
     def _insert_financials_by_account(self, account: str, start_date: date, end_date: date) -> None:
-        if not self.conduent_interface:
+        if not self.financial_interface:
             logger.warning('Unable to insert financial data. It requires a reports session, which is not setup.')
             return
 

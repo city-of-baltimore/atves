@@ -26,7 +26,7 @@ class CobReports:
         passman.add_password(None, 'https://cobrpt02.rsm.cloud', username, password)
         self.browser.add_handler(HTTPNtlmAuthHandler.HTTPNtlmAuthHandler(passman))
 
-        if self.browser.open('{}/Reports'.format(baseurl)).code != 200:
+        if self.browser.open(f'{baseurl}/Reports').code != 200:
             raise AssertionError('Invalid username/password')
 
         self.baseurl = baseurl
@@ -59,12 +59,12 @@ class CobReports:
             AccountType
             AgencyOrCategory
         """
-        logger.info("Getting the general ledger detail report")
+        logger.info('Getting the general ledger detail report')
         resp = self.browser.open(
             'https://cobrpt02.rsm.cloud/ReportServer/Pages/ReportViewer.aspx?%2FCOB%20Reports%2FMonthly%20Financials%20'
             'and%20Support%2FGeneral_Ledger_Detail&rc:showbackbutton=true').read()
 
-        soup = BeautifulSoup(resp, features="html.parser")
+        soup = BeautifulSoup(resp, features='html.parser')
         html = soup.find('form', id='ReportViewerForm').prettify().encode('utf8')
 
         self.browser.select_form(id='ReportViewerForm')
@@ -93,7 +93,7 @@ class CobReports:
         # Get the download URL
         response_url_base_group = re.search(r'"ExportUrlBase":"(.*?)"', resp.decode())
         if response_url_base_group is None:
-            raise AssertionError("Unable to find export URL")
+            raise AssertionError('Unable to find export URL')
         response_url_base = response_url_base_group.group(1)
 
         resp_dict = self.parse_ltiv_data(resp.decode())
@@ -109,9 +109,10 @@ class CobReports:
 
         self._make_response_and_submit(ctrl_dict, html)
 
-        csv_data = self.browser.open("{}{}CSV".format(self.baseurl, response_url_base.replace(r'\u0026', '&'))).read()
+        cleaned_response_url_base = response_url_base.replace(r'\u0026', '&')
+        csv_data = self.browser.open(f'{self.baseurl}{cleaned_response_url_base}CSV').read()
 
-        logger.debug("Got {} bytes of data".format(len(csv_data)))
+        logger.debug(f'Got {len(csv_data)} bytes of data')
 
         dtypes = {
             'JournalEntryNo': str,
@@ -132,8 +133,8 @@ class CobReports:
             'AccountType': str,
             'AgencyOrCategory': str,
         }
-        parse_dates = ['LedgerPostingDate']
-        ret = pd.read_csv(StringIO(csv_data.decode('utf-8')), delimiter=',', dtype=dtypes, parse_dates=parse_dates)
+        ret: pd.dataframe = pd.read_csv(StringIO(csv_data.decode('utf-8')), delimiter=',', dtype=dtypes,
+                                        parse_dates=['LedgerPostingDate'])
 
         # strip the whitespace
         df_obj = ret.select_dtypes(['object'])
@@ -174,8 +175,7 @@ class CobReports:
             """Parser that pulls off an element to the next delimiter, and optionally will read ilength bytes"""
             if ilength is not None:
                 if not (ilength < len(idata) and idata[ilength] == '|'):
-                    raise AssertionError("Malformed input. Expected delimiter where there wasn't one. idata: {}"
-                                         .format(idata[:100]))
+                    raise AssertionError('Malformed input. Expected delimiter. idata: {idata[:100]}')
                 iret = idata[:ilength]
                 idata = idata[ilength + 1:]  # drop the delimiter
                 return iret, idata
@@ -206,5 +206,6 @@ class CobReports:
 
     def _log_controls(self) -> None:
         logger.debug('\n'.join(
-            ['%s: %s *%s*' % (c.name, c.value, c.disabled) if c.disabled else '%s: %s' % (c.name, c.value) for c in
-             self.browser.form.controls]))
+            [f'{c.name}: {c.value} *{c.disabled}*'
+             if c.disabled else f'{c.name}: {c.value}'
+             for c in self.browser.form.controls]))

@@ -1,6 +1,6 @@
 """Test suite for axsis.py"""
 # pylint:disable=protected-access
-from datetime import date
+from datetime import date, datetime
 
 
 def test_axsis_get_traffic_counts(axsis_fixture):
@@ -52,10 +52,10 @@ def test_get_location_info(axsis_fixture):
 def test_get_officer_actions(axsis_fixture):
     """Test suite get_officer_actions"""
     res = axsis_fixture.get_officer_actions(date(2021, 11, 1), date(2021, 11, 2))
-    assert date(2021, 11, 1) in res['1']['date'].unique()[0]
-    assert date(2021, 11, 2) in res['1']['date'].unique()[0]
-    assert len(res['1']['date'].unique())
+    assert f'{datetime(2021, 11, 2).isoformat(timespec="microseconds")}000' in res['1']['Date'].unique()
+    assert f'{datetime(2021, 11, 2).isoformat(timespec="microseconds")}000' in res['1']['Date'].unique()
+    assert len(res['1']['Date'].unique())
 
-    assert date(2021, 11, 1) in res['0']['Action Date'].unique()[0]
-    assert date(2021, 11, 2) in res['0']['Action Date'].unique()[0]
+    assert f'{datetime(2021, 11, 1).isoformat(timespec="microseconds")}000' in res['0']['Action Date'].unique()
+    assert f'{datetime(2021, 11, 2).isoformat(timespec="microseconds")}000' in res['0']['Action Date'].unique()
     assert len(res['0']['Action Date'].unique())
