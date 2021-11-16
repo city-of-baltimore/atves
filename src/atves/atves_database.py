@@ -151,8 +151,6 @@ class AtvesDatabase(DatabaseBaseClass):
 
             try:
                 lat, lng = self.get_lat_long(ret['location'])
-                if not (lat or lng):
-                    continue
                 edate = None
                 if ret['effective_date'] is not None:
                     edate = datetime.strptime(ret['effective_date'], '%b %d, %Y')
@@ -550,10 +548,10 @@ class AtvesDatabase(DatabaseBaseClass):
         address = self._standardize_address(address)
         with warnings.catch_warnings():  # https://github.com/Esri/arcgis-python-api/issues/1090
             warnings.simplefilter("ignore")
-            geo_dict = geocode('{address}, Baltimore, MD')
+            geo_dict = geocode(f'{address}, Baltimore, MD')
         lat = None
         lng = None
-        if geo_dict and geo_dict[0]['score'] > 90:
+        if geo_dict and geo_dict[0]['score'] > 80:
             lat = float(geo_dict[0]['location']['y'])
             lng = float(geo_dict[0]['location']['x'])
         return lat, lng

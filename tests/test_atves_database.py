@@ -280,6 +280,12 @@ def test_process_officer_actions(atvesdb_fixture, atvesdb_fixture_no_creds, conn
         assert ret.count() > 10
 
 
+def test_get_lat_long(atvesdb_fixture):
+    """Test get_lat_long"""
+    lat, lng = atvesdb_fixture.get_lat_long('4000 blk Pulaski Hwy WB')
+    assert lat and lng
+
+
 def setup_logging(debug=False, info=False, path: Path = None):
     """
     Configures the logging level, and sets up file based logging. By default, the following logging levels are enabled:
