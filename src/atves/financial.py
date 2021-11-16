@@ -138,11 +138,11 @@ class CobReports:
 
         # strip the whitespace
         df_obj = ret.select_dtypes(['object'])
-        ret[df_obj.columns] = df_obj.apply(lambda x: x.str.strip())
+        ret[df_obj.columns] = df_obj.apply(lambda x: x.str.strip())  # pylint: disable=unsupported-assignment-operation
 
         # Make the amount a float
         ret['Amount'] = ret['Amount'].replace(r'[\$,)]', '', regex=True).replace('[(]', '-', regex=True).fillna(0)\
-            .astype(float)
+            .astype(float)  # pylint: disable=unsupported-assignment-operation,unsubscriptable-object
 
         return ret
 

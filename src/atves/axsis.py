@@ -198,7 +198,7 @@ class Axsis:
             'Warning Issued': 'sum'
         }
         dataframe['Date'] = start_date
-        return dataframe.groupby(dataframe['Location Code']).aggregate(agg)
+        return dataframe.groupby(dataframe['Location Code']).aggregate(agg)  # pylint:disable=unsubscriptable-object
 
     @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
            retry=(retry_if_exception_type(requests.exceptions.ConnectionError) |

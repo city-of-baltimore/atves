@@ -1,6 +1,6 @@
 """Test suite for axsis.py"""
 # pylint:disable=protected-access
-from datetime import date, datetime
+from datetime import date
 
 
 def test_axsis_get_traffic_counts(axsis_fixture):

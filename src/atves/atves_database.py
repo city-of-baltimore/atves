@@ -260,7 +260,7 @@ class AtvesDatabase(DatabaseBaseClass):
                 # no data
                 return
 
-            for _, row in data.iterrows():
+            for _, row in data.iterrows():  # pylint:disable=no-member
                 self._insert_or_update(AtvesAmberTimeRejects(
                     location_code=int(row['iLocationCode']),
                     deployment_no=int(row['Deployment Number']),
@@ -319,7 +319,7 @@ class AtvesDatabase(DatabaseBaseClass):
                 # no data
                 return
 
-            for _, row in data.iterrows():
+            for _, row in data.iterrows():  # pylint:disable=no-member
                 self._insert_or_update(AtvesTrafficCounts(location_code=str(row['iLocationCode']).strip(),
                                                           date=row['Ddate'],
                                                           count=int(row['VehPass'])))
@@ -495,7 +495,7 @@ class AtvesDatabase(DatabaseBaseClass):
         if (data := self.financial_interface.get_general_ledger_detail(start_date, end_date, account, '55')).empty:
             # no data
             return
-        for _, row in data.iterrows():
+        for _, row in data.iterrows():  # pylint:disable=no-member
             self._insert_or_update(AtvesFinancial(
                 journal_entry_no=row['JournalEntryNo'],
                 ledger_posting_date=row['LedgerPostingDate'],
@@ -533,14 +533,14 @@ class AtvesDatabase(DatabaseBaseClass):
                 # no data
                 return
 
-        for _, row in data['1'].iterrows():
-            self._insert_or_update(AtvesRejectReason(
-                date=row['Date'],
-                reject_reason=row['Reject Reason Factors'],
-                pd_review=row['PD Review'],
-                supervisor_review=row['Supervisor Review'],
-                total=row['Total Count']
-            ))
+            for _, row in data['1'].iterrows():
+                self._insert_or_update(AtvesRejectReason(
+                    date=row['Date'],
+                    reject_reason=row['Reject Reason Factors'],
+                    pd_review=row['PD Review'],
+                    supervisor_review=row['Supervisor Review'],
+                    total=row['Total Count']
+                ))
 
     def get_lat_long(self, address) -> Tuple[Optional[float], Optional[float]]:
         """
@@ -550,7 +550,7 @@ class AtvesDatabase(DatabaseBaseClass):
         address = self._standardize_address(address)
         with warnings.catch_warnings():  # https://github.com/Esri/arcgis-python-api/issues/1090
             warnings.simplefilter("ignore")
-            geo_dict = geocode('{}, Baltimore, MD'.format(address))
+            geo_dict = geocode('{address}, Baltimore, MD')
         lat = None
         lng = None
         if geo_dict and geo_dict[0]['score'] > 90:
