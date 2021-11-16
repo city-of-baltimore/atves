@@ -51,7 +51,7 @@ class AtvesRejectReason(Base):
     __tablename__ = 'atves_rejections'
 
     date = Column(Date, primary_key=True)
-    reject_reason = Column(String, primary_key=True)
+    reject_reason = Column(String(length=100), primary_key=True)
     pd_review = Column(Integer)
     supervisor_review = Column(Integer)
     total = Column(Integer)
