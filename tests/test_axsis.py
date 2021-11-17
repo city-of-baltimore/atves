@@ -59,3 +59,8 @@ def test_get_officer_actions(axsis_fixture):
     assert any(res['1']['Date'].isin([date(2021, 11, 1)]))
     assert any(res['1']['Date'].isin([date(2021, 11, 2)]))
     assert len(res['0']['Action Date'].unique()) == 2
+
+    # Test failure case
+    res = axsis_fixture.get_officer_actions(date(2021, 11, 7), date(2021, 11, 7))
+    assert res['0'].empty
+    assert res['1'].empty
