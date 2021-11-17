@@ -277,10 +277,11 @@ def test_process_officer_actions(atvesdb_fixture, atvesdb_fixture_no_creds, conn
             assert len([x.date
                         for x in ret
                         if x.date > end_date or x.date < start_date]) == 0
-            # There is missing data on the 7th
-            assert len([x.date
-                        for x in ret
-                        if x.date <= end_date or x.date >= start_date]) == 3
+            # There is missing data on the 6th and 7th
+            import pdb;pdb.set_trace()
+            assert len(set([x.date
+                           for x in ret
+                           if x.date <= end_date or x.date >= start_date])) == 2
         assert ret.count() > 10
 
 
