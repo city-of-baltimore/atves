@@ -262,8 +262,8 @@ def test_atvesdb_process_financials_speed(atvesdb_fixture, atvesdb_fixture_no_cr
 
 def test_process_officer_actions(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Test process_officer_actions"""
-    start_date = date(2021, 11, 1)
-    end_date = date(2021, 11, 2)
+    start_date = date(2021, 11, 5)
+    end_date = date(2021, 11, 8)
     engine = create_engine(conn_str, echo=True, future=True)
     with Session(bind=engine, future=True) as session:
         atvesdb_fixture_no_creds.process_officer_actions(start_date=start_date, end_date=end_date)
@@ -277,6 +277,10 @@ def test_process_officer_actions(atvesdb_fixture, atvesdb_fixture_no_creds, conn
             assert len([x.date
                         for x in ret
                         if x.date > end_date or x.date < start_date]) == 0
+            # There is missing data on the 7th
+            assert len([x.date
+                        for x in ret
+                        if x.date <= end_date or x.date >= start_date]) == 3
         assert ret.count() > 10
 
 

@@ -256,7 +256,7 @@ class AtvesDatabase(DatabaseBaseClass):
         for working_date in dates:
             if (data := self.conduent_interface.get_amber_time_rejects_report(working_date, working_date)).empty:
                 # no data
-                return
+                continue
 
             for _, row in data.iterrows():  # pylint:disable=no-member
                 self._insert_or_update(AtvesAmberTimeRejects(
@@ -293,7 +293,7 @@ class AtvesDatabase(DatabaseBaseClass):
         for working_date in dates:
             if (data := self.axsis_interface.get_traffic_counts(working_date, working_date)).empty:
                 # no data
-                return
+                continue
 
             data = data.to_dict('index')
             columns = data[0].keys() - ['Location code', 'Description', 'First Traf Evt', 'Last Traf Evt']
@@ -315,7 +315,7 @@ class AtvesDatabase(DatabaseBaseClass):
         for working_date in dates:
             if (data := self.conduent_interface.get_traffic_counts_by_location(working_date, working_date)).empty:
                 # no data
-                return
+                continue
 
             for _, row in data.iterrows():  # pylint:disable=no-member
                 self._insert_or_update(AtvesTrafficCounts(location_code=str(row['iLocationCode']).strip(),
@@ -529,7 +529,7 @@ class AtvesDatabase(DatabaseBaseClass):
         for working_date in dates:
             if (data := self.axsis_interface.get_officer_actions(working_date, working_date))['1'].empty:
                 # no data
-                return
+                continue
 
             for _, row in data['1'].iterrows():
                 self._insert_or_update(AtvesRejectReason(
