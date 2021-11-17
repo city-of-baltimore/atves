@@ -11,10 +11,10 @@ from pandas import to_datetime  # type: ignore
 from sqlalchemy import create_engine, exc as sa_exc  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
 
-from atves.constants import OVERHEIGHT, REDLIGHT, SPEED
 from atves.atves_database import parse_args
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFinancial, AtvesRejectReason, \
     AtvesTrafficCounts, AtvesViolationCategories, AtvesViolations
+from atves.constants import OVERHEIGHT, REDLIGHT, SPEED
 
 
 def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
@@ -279,8 +279,8 @@ def test_process_officer_actions(atvesdb_fixture, atvesdb_fixture_no_creds, conn
                         if x.date > end_date or x.date < start_date]) == 0
             # There is missing data on the 6th and 7th
             assert len({x.date
-                           for x in ret
-                           if x.date <= end_date or x.date >= start_date}) == 2
+                        for x in ret
+                        if x.date <= end_date or x.date >= start_date}) == 2
         assert ret.count() > 10
 
 
