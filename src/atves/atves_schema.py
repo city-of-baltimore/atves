@@ -84,7 +84,7 @@ class AtvesFinancial(Base):
 
     journal_entry_no = Column(String(length=30), primary_key=True)
     ledger_posting_date = Column(Date, nullable=False)
-    account_no = Column(String(length=50))
+    account_no = Column(String(length=50), primary_key=True)
     legacy_account_no = Column(String(length=50))
     amount = Column(Numeric(precision=12, scale=2))
     source_journal = Column(String(length=50))
