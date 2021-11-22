@@ -13,10 +13,12 @@ from typing import Optional, Tuple
 from arcgis.geocoding import geocode  # type: ignore
 from arcgis.gis import GIS  # type: ignore
 from databasebaseclass.base import DatabaseBaseClass
+from json.decoder import JSONDecodeError
 from loguru import logger
 from sqlalchemy import create_engine, event  # type: ignore
 from sqlalchemy.engine import Engine  # type: ignore
 from sqlalchemy.orm import Session  # type: ignore
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 
 from atves.constants import ALLCAMS, REDLIGHT, OVERHEIGHT, SPEED
 from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFinancial, AtvesRejectReason, \
@@ -540,11 +542,14 @@ class AtvesDatabase(DatabaseBaseClass):
                     total=row['Total Count']
                 ))
 
+    @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
+           retry=(retry_if_exception_type(JSONDecodeError)))
     def get_lat_long(self, address) -> Tuple[Optional[float], Optional[float]]:
         """
         Get the latitude and longitude for an address if the accuracy score is high enough
         :param address: Street address to search. The more complete the address, the better.
         """
+        logger.debug(f'Looking up {address}')
         address = self._standardize_address(address)
         with warnings.catch_warnings():  # https://github.com/Esri/arcgis-python-api/issues/1090
             warnings.simplefilter("ignore")
