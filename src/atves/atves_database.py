@@ -7,13 +7,13 @@ import re
 import sys
 import warnings
 from datetime import date, datetime, timedelta
+from json.decoder import JSONDecodeError
 from sqlite3 import Connection as SQLite3Connection
 from typing import Optional, Tuple
 
 from arcgis.geocoding import geocode  # type: ignore
 from arcgis.gis import GIS  # type: ignore
 from databasebaseclass.base import DatabaseBaseClass
-from json.decoder import JSONDecodeError
 from loguru import logger
 from sqlalchemy import create_engine, event  # type: ignore
 from sqlalchemy.engine import Engine  # type: ignore
