@@ -24,7 +24,11 @@ def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no
         # atvesdb_fixture.build_location_db() is called in the setup
         ret = session.query(AtvesCamLocations.cam_type,
                             AtvesCamLocations.lat,
-                            AtvesCamLocations.long).filter(AtvesCamLocations.cam_type == 'RL')
+                            AtvesCamLocations.long,
+                            AtvesCamLocations.effective_date,
+                            AtvesCamLocations.last_record).filter(AtvesCamLocations.cam_type == 'RL')
+        assert all(isinstance(i[3], date) for i in ret.all())
+        assert all(isinstance(i[4], date) for i in ret.all())
         assert ret.count() > 100
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', category=sa_exc.SAWarning)
@@ -42,7 +46,10 @@ def test_atvesdb_build_db_conduent_overheight(atvesdb_fixture, atvesdb_fixture_n
                             AtvesCamLocations.long,
                             AtvesCamLocations.locationdescription,
                             AtvesCamLocations.speed_limit,
-                            AtvesCamLocations.effective_date).filter(AtvesCamLocations.cam_type == 'OH')
+                            AtvesCamLocations.effective_date,
+                            AtvesCamLocations.last_record).filter(AtvesCamLocations.cam_type == 'OH')
+        assert all(isinstance(i[5], date) for i in ret.all())
+        assert all(isinstance(i[6], date) for i in ret.all())
         assert ret.count() > 10
 
         # throw away None results, but make sure its not all of them
@@ -69,7 +76,10 @@ def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_cred
         ret = session.query(AtvesCamLocations.cam_type,
                             AtvesCamLocations.lat,
                             AtvesCamLocations.long,
-                            AtvesCamLocations.effective_date).filter(AtvesCamLocations.cam_type == 'SC')
+                            AtvesCamLocations.effective_date,
+                            AtvesCamLocations.last_record).filter(AtvesCamLocations.cam_type == 'SC')
+        assert all(isinstance(i[3], date) for i in ret.all())
+        assert all(isinstance(i[4], date) for i in ret.all())
         assert ret.count() > 10
 
         with warnings.catch_warnings():
@@ -134,6 +144,39 @@ def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_cred
 
         ret = session.query(AtvesCamLocations.effective_date).filter(AtvesCamLocations.location_code == 'BAL103')
         assert not ret.all()[0][0]
+
+
+def test_get_cam_start_end(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
+    """Testing _get_cam_start_end"""
+    engine = create_engine(conn_str, echo=True, future=True)
+    with Session(bind=engine, future=True) as session:
+        session.add_all([
+            AtvesViolationCategories(
+                violation_cat=1,
+                description=' '),
+            AtvesViolations(
+                date=to_datetime('2020-01-01 00:00:00.000'),
+                location_code='BAL100',
+                count=0,
+                violation_cat=1,
+                details='Citations Issued'),
+            AtvesViolations(
+                date=to_datetime('2020-01-02 00:00:00.000'),
+                location_code='BAL100',
+                count=0,
+                violation_cat=1,
+                details='Citations Issued'),
+            AtvesViolations(
+                date=to_datetime('2020-01-03 00:00:00.000'),
+                location_code='BAL100',
+                count=0,
+                violation_cat=1,
+                details='Citations Issued')
+        ])
+        session.commit()
+    start, end = atvesdb_fixture._get_cam_start_end('BAL100')
+    assert start == date(2020, 1, 1)
+    assert end == date(2020, 1, 3)
 
 
 def test_atvesdb_process_conduent_data_amber_time(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
