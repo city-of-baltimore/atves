@@ -176,43 +176,41 @@ class AtvesDatabase(DatabaseBaseClass):
             logger.warning('Unable to run _build_db_speed_cameras. It requires a Axsis session, which is not setup.')
             return False
 
-        # Get the list of location codes in the traffic count database (AXSIS)
-        with Session(bind=self.engine, future=True) as session:
-            # get all cameras used in the last 30 days
-            report_details = self.axsis_interface.get_reports_detail('LOCATION PERFORMANCE DETAIL')
-            if report_details is None or report_details.get('Parameters') is None:
-                logger.error('Unable to get speed camera information')
-                return False
+        # Get the list of location codes in the traffic count database (AXSIS) from the last 30 days
+        report_details = self.axsis_interface.get_reports_detail('LOCATION PERFORMANCE DETAIL')
+        if report_details is None or report_details.get('Parameters') is None:
+            logger.error('Unable to get speed camera information')
+            return False
 
-            active_cams = [param_elem.get('Description').split(' - ')
-                           for param in report_details['Parameters']
-                           if param['ParmTitle'] == 'Violation Locations' and param['ParmList'] is not None
-                           for param_elem in param['ParmList']]
+        active_cams = [param_elem.get('Description').split(' - ')
+                       for param in report_details['Parameters']
+                       if param['ParmTitle'] == 'Violation Locations' and param['ParmList'] is not None
+                       for param_elem in param['ParmList']]
 
-            for location_code, location in active_cams:
-                lat: Optional[float] = None
-                lng: Optional[float] = None
+        for location_code, location in active_cams:
+            lat: Optional[float] = None
+            lng: Optional[float] = None
 
-                if not location_code:
+            if not location_code:
+                continue
+
+            cam_start_date, cam_end_date = self._get_cam_start_end(location_code)
+
+            # if the location was specified, then lets look it up
+            if location:
+                lat, lng = self.get_lat_long(location)
+                if not (lat and lng):
                     continue
 
-                cam_start_date, cam_end_date = self._get_cam_start_end(location_code)
-
-                # if the location was specified, then lets look it up
-                if location:
-                    lat, lng = self.get_lat_long(location)
-                    if not (lat and lng):
-                        continue
-
-                self._insert_or_update(AtvesCamLocations(location_code=location_code,
-                                                         locationdescription=location,
-                                                         lat=lat,
-                                                         long=lng,
-                                                         cam_type='SC',
-                                                         effective_date=cam_start_date,
-                                                         last_record=cam_end_date,
-                                                         speed_limit=None,
-                                                         status=None))
+            self._insert_or_update(AtvesCamLocations(location_code=location_code,
+                                                     locationdescription=location,
+                                                     lat=lat,
+                                                     long=lng,
+                                                     cam_type='SC',
+                                                     effective_date=cam_start_date,
+                                                     last_record=cam_end_date,
+                                                     speed_limit=None,
+                                                     status=None))
 
         return True
 

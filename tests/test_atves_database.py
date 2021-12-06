@@ -36,7 +36,8 @@ def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no
 
         ret = session.query(AtvesCamLocations.effective_date,
                             AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == 'BAL111')
-        assert not ret.all()
+        assert not ret.all()[0][0]
+        assert not ret.all()[0][1]
 
         # Test the logic to use the violations to get the start date
 
