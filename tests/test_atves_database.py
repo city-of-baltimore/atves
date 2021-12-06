@@ -46,20 +46,20 @@ def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no
                 violation_cat=1,
                 description=' '),
             AtvesViolations(
-                date=to_datetime('2020-01-01 00:00:00.000'),
-                location_code='BAL111',
+                date=to_datetime('2017-07-30 00:00:00.000'),
+                location_code='1002',
                 count=0,
                 violation_cat=1,
                 details='Citations Issued'),
             AtvesViolations(
-                date=to_datetime('2020-01-02 00:00:00.000'),
-                location_code='BAL111',
+                date=to_datetime('2017-07-31 00:00:00.000'),
+                location_code='1002',
                 count=0,
                 violation_cat=1,
                 details='Citations Issued'),
             AtvesViolations(
-                date=to_datetime('2020-01-03 00:00:00.000'),
-                location_code='BAL111',
+                date=to_datetime('2017-08-01 00:00:00.000'),
+                location_code='1002',
                 count=0,
                 violation_cat=1,
                 details='Citations Issued')
@@ -68,19 +68,19 @@ def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no
 
         atvesdb_fixture._build_db_conduent_red_light()
         ret = session.query(AtvesCamLocations.effective_date,
-                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == 'BAL111')
-        assert ret.all()[0][0] == date(2020, 1, 1)
-        assert ret.all()[0][1] == date(2020, 1, 3)
+                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == '1002')
+        assert ret.all()[0][0] == date(2017, 7, 31)  # use original date reported from Conduent
+        assert ret.all()[0][1] == date(2017, 8, 1)
 
         ret = session.query(AtvesCamLocations.effective_date,
-                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == 'BAL112')
-        assert not ret.all()[0][0]
+                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == '1014')
+        assert ret.all()[0][0] == date(2017, 7, 31)  # use original date reported from Conduent
         assert not ret.all()[0][1]
 
         # Test the logic to use traffic counts to determine the start/end date
         session.add_all([
             AtvesTrafficCounts(
-                location_code='BAL113',
+                location_code='1022',
                 date=to_datetime('2020-02-01 00:00:00.000'),
                 count=500
             )
@@ -89,13 +89,13 @@ def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no
 
         atvesdb_fixture._build_db_conduent(True)
         ret = session.query(AtvesCamLocations.effective_date,
-                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == 'BAL113')
-        assert ret.all()[0][0] == date(2020, 2, 1)
+                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == '1022')
+        assert ret.all()[0][0] == date(2017, 7, 31)
         assert ret.all()[0][1] == date(2020, 2, 1)
 
         ret = session.query(AtvesCamLocations.effective_date,
-                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == 'BAL114')
-        assert not ret.all()[0][0]
+                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == '1023')
+        assert ret.all()[0][0] == date(2017, 7, 31)
         assert not ret.all()[0][1]
 
 
