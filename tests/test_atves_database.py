@@ -28,55 +28,58 @@ def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no
                             AtvesCamLocations.effective_date,
                             AtvesCamLocations.last_record).filter(AtvesCamLocations.cam_type == 'RL')
         assert ret.count() > 100
+
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', category=sa_exc.SAWarning)
             assert all((39.2 < i[1] < 39.38 for i in ret.all()))
             assert all((-76.73 < i[2] < -76.52 for i in ret.all()))
 
-        ret = session.query(AtvesCamLocations.effective_date).filter(AtvesCamLocations.location_code == 'BAL0100')
-        assert not ret.all()[0][0]
+        ret = session.query(AtvesCamLocations.effective_date,
+                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == 'BAL111')
+        assert not ret.all()
 
         # Test the logic to use the violations to get the start date
+
         session.add_all([
             AtvesViolationCategories(
                 violation_cat=1,
                 description=' '),
             AtvesViolations(
                 date=to_datetime('2020-01-01 00:00:00.000'),
-                location_code='BAL0100',
+                location_code='BAL111',
                 count=0,
                 violation_cat=1,
                 details='Citations Issued'),
             AtvesViolations(
                 date=to_datetime('2020-01-02 00:00:00.000'),
-                location_code='BAL0100',
+                location_code='BAL111',
                 count=0,
                 violation_cat=1,
                 details='Citations Issued'),
             AtvesViolations(
                 date=to_datetime('2020-01-03 00:00:00.000'),
-                location_code='BAL0100',
+                location_code='BAL111',
                 count=0,
                 violation_cat=1,
                 details='Citations Issued')
         ])
         session.commit()
 
-        atvesdb_fixture.build_location_db(True)
+        atvesdb_fixture._build_db_conduent_red_light()
         ret = session.query(AtvesCamLocations.effective_date,
-                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == 'BAL0100')
+                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == 'BAL111')
         assert ret.all()[0][0] == date(2020, 1, 1)
         assert ret.all()[0][1] == date(2020, 1, 3)
 
         ret = session.query(AtvesCamLocations.effective_date,
-                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == 'BAL0101')
+                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == 'BAL112')
         assert not ret.all()[0][0]
         assert not ret.all()[0][1]
 
         # Test the logic to use traffic counts to determine the start/end date
         session.add_all([
             AtvesTrafficCounts(
-                location_code='BAL0102',
+                location_code='BAL113',
                 date=to_datetime('2020-02-01 00:00:00.000'),
                 count=500
             )
@@ -85,12 +88,12 @@ def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no
 
         atvesdb_fixture._build_db_conduent(True)
         ret = session.query(AtvesCamLocations.effective_date,
-                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == 'BAL0102')
+                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == 'BAL113')
         assert ret.all()[0][0] == date(2020, 2, 1)
         assert ret.all()[0][1] == date(2020, 2, 1)
 
         ret = session.query(AtvesCamLocations.effective_date,
-                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == 'BAL0103')
+                            AtvesCamLocations.last_record).filter(AtvesCamLocations.location_code == 'BAL114')
         assert not ret.all()[0][0]
         assert not ret.all()[0][1]
 
