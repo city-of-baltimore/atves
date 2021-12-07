@@ -237,7 +237,6 @@ class AtvesDatabase(DatabaseBaseClass):
             # if there were no traffic counts, lets look for issued violations
             if not cam_start_date:
                 ret = session.query(AtvesViolations.date) \
-                    .filter(AtvesViolations.violation_cat == 5) \
                     .filter(AtvesViolations.location_code == location_code)
 
                 if ret.order_by(AtvesViolations.date).first():
