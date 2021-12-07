@@ -165,6 +165,7 @@ class AtvesDatabase(DatabaseBaseClass):
                     cam_type=str(ret['cam_type']),
                     effective_date=cam_start_date,
                     last_record=cam_end_date,
+                    days_active=(cam_end_date - cam_start_date).days,
                     speed_limit=speed_limit,
                     status=bool(ret['status'] == 'Active')))
             except RuntimeError as err:
@@ -209,6 +210,7 @@ class AtvesDatabase(DatabaseBaseClass):
                                                      cam_type='SC',
                                                      effective_date=cam_start_date,
                                                      last_record=cam_end_date,
+                                                     days_active=(cam_end_date - cam_start_date).days,
                                                      speed_limit=None,
                                                      status=None))
 

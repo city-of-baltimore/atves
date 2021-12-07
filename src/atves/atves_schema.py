@@ -28,6 +28,7 @@ class AtvesCamLocations(Base):
     cam_type = Column(String(length=2), nullable=False)
     effective_date = Column(Date)
     last_record = Column(Date)
+    days_active = Column(Integer)
     speed_limit = Column(Integer)
     status = Column(Boolean)
 
