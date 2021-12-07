@@ -220,25 +220,25 @@ def test_get_cam_start_end(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, 
     with Session(bind=engine, future=True) as session:
         session.add_all([
             AtvesViolationCategories(
-                violation_cat=1,
+                violation_cat=5,
                 description=' '),
             AtvesViolations(
                 date=to_datetime('2020-01-01 00:00:00.000'),
                 location_code='BAL100',
                 count=0,
-                violation_cat=1,
+                violation_cat=5,
                 details='Citations Issued'),
             AtvesViolations(
                 date=to_datetime('2020-01-02 00:00:00.000'),
                 location_code='BAL100',
                 count=0,
-                violation_cat=1,
+                violation_cat=5,
                 details='Citations Issued'),
             AtvesViolations(
                 date=to_datetime('2020-01-03 00:00:00.000'),
                 location_code='BAL100',
                 count=0,
-                violation_cat=1,
+                violation_cat=5,
                 details='Citations Issued')
         ])
         session.commit()
