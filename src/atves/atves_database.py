@@ -220,14 +220,14 @@ class AtvesDatabase(DatabaseBaseClass):
 
         return True
 
-    def _get_cam_start_end(self, location_code: str) -> Tuple[Optional[datetime], Optional[datetime]]:
+    def _get_cam_start_end(self, location_code: str) -> Tuple[Optional[date], Optional[date]]:
         """
         Gets the camera activity dates based on traffic data or violation data
         :param location_code: Camera location code that matches the camera location table
         :return: start and end date for the camera; active cameras are still given an end date
         """
-        cam_start_date: Optional[datetime] = None
-        cam_end_date: Optional[datetime] = None
+        cam_start_date: Optional[date] = None
+        cam_end_date: Optional[date] = None
 
         with Session(bind=self.engine, future=True) as session:
             # First, lets get a date when this camera existed... lets look for traffic counts first
