@@ -43,26 +43,26 @@ def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no
 
         session.add_all([
             AtvesViolationCategories(
-                violation_cat=1,
+                violation_cat=5,
                 description=' '),
             AtvesViolations(
                 date=to_datetime('2017-07-30 00:00:00.000'),
                 location_code='1002',
                 count=0,
-                violation_cat=1,
-                details='Citations Issued'),
+                violation_cat=5,
+                details='Warning Letter Issued'),
             AtvesViolations(
                 date=to_datetime('2017-07-31 00:00:00.000'),
                 location_code='1002',
                 count=0,
-                violation_cat=1,
-                details='Citations Issued'),
+                violation_cat=5,
+                details='First Mail Pending/Issued'),
             AtvesViolations(
                 date=to_datetime('2017-08-01 00:00:00.000'),
                 location_code='1002',
                 count=0,
-                violation_cat=1,
-                details='Citations Issued')
+                violation_cat=5,
+                details='Fine Paid')
         ])
         session.commit()
 
@@ -158,25 +158,25 @@ def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_cred
         # Test the logic to use the violations to get the start date
         session.add_all([
             AtvesViolationCategories(
-                violation_cat=1,
+                violation_cat=5,
                 description=' '),
             AtvesViolations(
                 date=to_datetime('2020-01-01 00:00:00.000'),
                 location_code='BAL100',
                 count=0,
-                violation_cat=1,
+                violation_cat=5,
                 details='Citations Issued'),
             AtvesViolations(
                 date=to_datetime('2020-01-02 00:00:00.000'),
                 location_code='BAL100',
                 count=0,
-                violation_cat=1,
+                violation_cat=5,
                 details='Citations Issued'),
             AtvesViolations(
                 date=to_datetime('2020-01-03 00:00:00.000'),
                 location_code='BAL100',
                 count=0,
-                violation_cat=1,
+                violation_cat=5,
                 details='Citations Issued')
         ])
         session.commit()
@@ -220,25 +220,25 @@ def test_get_cam_start_end(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, 
     with Session(bind=engine, future=True) as session:
         session.add_all([
             AtvesViolationCategories(
-                violation_cat=1,
+                violation_cat=5,
                 description=' '),
             AtvesViolations(
                 date=to_datetime('2020-01-01 00:00:00.000'),
                 location_code='BAL100',
                 count=0,
-                violation_cat=1,
+                violation_cat=5,
                 details='Citations Issued'),
             AtvesViolations(
                 date=to_datetime('2020-01-02 00:00:00.000'),
                 location_code='BAL100',
                 count=0,
-                violation_cat=1,
+                violation_cat=5,
                 details='Citations Issued'),
             AtvesViolations(
                 date=to_datetime('2020-01-03 00:00:00.000'),
                 location_code='BAL100',
                 count=0,
-                violation_cat=1,
+                violation_cat=5,
                 details='Citations Issued')
         ])
         session.commit()

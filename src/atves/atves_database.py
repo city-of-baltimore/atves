@@ -155,7 +155,10 @@ class AtvesDatabase(DatabaseBaseClass):
                 lat, lng = self.get_lat_long(ret['location'])
                 cam_start_date, cam_end_date = self._get_cam_start_end(str(ret['site_code']))
                 if ret['effective_date'] is not None:
-                    cam_start_date = datetime.strptime(ret['effective_date'], '%b %d, %Y')
+                    cam_start_date = datetime.strptime(ret['effective_date'], '%b %d, %Y').date()
+
+                days_active = (cam_end_date - cam_start_date).days if cam_start_date and cam_end_date else None
+
                 speed_limit = int(ret['speed_limit']) if ret['speed_limit'] is not None else 0
                 self._insert_or_update(AtvesCamLocations(
                     location_code=str(ret['site_code']),
@@ -165,6 +168,7 @@ class AtvesDatabase(DatabaseBaseClass):
                     cam_type=str(ret['cam_type']),
                     effective_date=cam_start_date,
                     last_record=cam_end_date,
+                    days_active=days_active,
                     speed_limit=speed_limit,
                     status=bool(ret['status'] == 'Active')))
             except RuntimeError as err:
@@ -202,6 +206,8 @@ class AtvesDatabase(DatabaseBaseClass):
                 if not (lat and lng):
                     continue
 
+            days_active = (cam_end_date - cam_start_date).days if cam_start_date and cam_end_date else None
+
             self._insert_or_update(AtvesCamLocations(location_code=location_code,
                                                      locationdescription=location,
                                                      lat=lat,
@@ -209,19 +215,20 @@ class AtvesDatabase(DatabaseBaseClass):
                                                      cam_type='SC',
                                                      effective_date=cam_start_date,
                                                      last_record=cam_end_date,
+                                                     days_active=days_active,
                                                      speed_limit=None,
                                                      status=None))
 
         return True
 
-    def _get_cam_start_end(self, location_code: str) -> Tuple[Optional[datetime], Optional[datetime]]:
+    def _get_cam_start_end(self, location_code: str) -> Tuple[Optional[date], Optional[date]]:
         """
         Gets the camera activity dates based on traffic data or violation data
         :param location_code: Camera location code that matches the camera location table
         :return: start and end date for the camera; active cameras are still given an end date
         """
-        cam_start_date: Optional[datetime] = None
-        cam_end_date: Optional[datetime] = None
+        cam_start_date: Optional[date] = None
+        cam_end_date: Optional[date] = None
 
         with Session(bind=self.engine, future=True) as session:
             # First, lets get a date when this camera existed... lets look for traffic counts first
@@ -237,7 +244,6 @@ class AtvesDatabase(DatabaseBaseClass):
             # if there were no traffic counts, lets look for issued violations
             if not cam_start_date:
                 ret = session.query(AtvesViolations.date) \
-                    .filter(AtvesViolations.details == 'Citations Issued') \
                     .filter(AtvesViolations.location_code == location_code)
 
                 if ret.order_by(AtvesViolations.date).first():
