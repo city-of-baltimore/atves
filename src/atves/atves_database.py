@@ -155,7 +155,9 @@ class AtvesDatabase(DatabaseBaseClass):
                 lat, lng = self.get_lat_long(ret['location'])
                 cam_start_date, cam_end_date = self._get_cam_start_end(str(ret['site_code']))
                 if ret['effective_date'] is not None:
-                    cam_start_date = datetime.strptime(ret['effective_date'], '%b %d, %Y')
+                    cam_start_date = datetime.strptime(ret['effective_date'], '%b %d, %Y').date()
+
+                days_active = (cam_end_date - cam_start_date).days if cam_start_date and cam_end_date else None
                 speed_limit = int(ret['speed_limit']) if ret['speed_limit'] is not None else 0
                 self._insert_or_update(AtvesCamLocations(
                     location_code=str(ret['site_code']),
@@ -165,7 +167,7 @@ class AtvesDatabase(DatabaseBaseClass):
                     cam_type=str(ret['cam_type']),
                     effective_date=cam_start_date,
                     last_record=cam_end_date,
-                    days_active=(cam_end_date - cam_start_date).days,
+                    days_active=days_active,
                     speed_limit=speed_limit,
                     status=bool(ret['status'] == 'Active')))
             except RuntimeError as err:
@@ -203,6 +205,8 @@ class AtvesDatabase(DatabaseBaseClass):
                 if not (lat and lng):
                     continue
 
+            days_active = (cam_end_date - cam_start_date).days if cam_start_date and cam_end_date else None
+
             self._insert_or_update(AtvesCamLocations(location_code=location_code,
                                                      locationdescription=location,
                                                      lat=lat,
@@ -210,7 +214,7 @@ class AtvesDatabase(DatabaseBaseClass):
                                                      cam_type='SC',
                                                      effective_date=cam_start_date,
                                                      last_record=cam_end_date,
-                                                     days_active=(cam_end_date - cam_start_date).days,
+                                                     days_active=days_active,
                                                      speed_limit=None,
                                                      status=None))
 
