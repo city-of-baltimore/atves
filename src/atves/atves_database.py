@@ -158,6 +158,7 @@ class AtvesDatabase(DatabaseBaseClass):
                     cam_start_date = datetime.strptime(ret['effective_date'], '%b %d, %Y').date()
 
                 days_active = (cam_end_date - cam_start_date).days if cam_start_date and cam_end_date else None
+
                 speed_limit = int(ret['speed_limit']) if ret['speed_limit'] is not None else 0
                 self._insert_or_update(AtvesCamLocations(
                     location_code=str(ret['site_code']),
