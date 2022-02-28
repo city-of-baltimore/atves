@@ -58,18 +58,24 @@ def fixture_report_password(request):
 @pytest.fixture(name='conduent_fixture')
 def fixture_conduent(conduent_username, conduent_password):
     """Conduent object"""
+    if not (conduent_username and conduent_password):
+        raise ValueError('Conduent username and password required')
     return atves.conduent.Conduent(conduent_username, conduent_password)
 
 
 @pytest.fixture(name='axsis_fixture')
 def fixture_axsis(axsis_username, axsis_password):
     """Axsis object"""
+    if not (axsis_username and axsis_password):
+        raise ValueError('Axsis username and password required')
     return atves.axsis.Axsis(axsis_username, axsis_password)
 
 
 @pytest.fixture(name='cobreport_fixture')
 def fixture_cobreport(report_username, report_password):
     """CobReport object"""
+    if not (report_username and report_password):
+        raise ValueError('Financial login required')
     return atves.financial.CobReports(report_username, report_password)
 
 

@@ -2,6 +2,16 @@
 # pylint:disable=protected-access
 from datetime import date
 
+import pytest
+
+import atves
+
+
+def test_axsis_invalid_user_pass():
+    """Tests the Axsis interface with an invalid username and password"""
+    with pytest.raises(AssertionError):
+        atves.axsis.Axsis('test', 'test')
+
 
 def test_axsis_get_traffic_counts(axsis_fixture):
     """Test suite get_traffic_counts"""
