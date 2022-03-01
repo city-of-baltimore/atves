@@ -28,9 +28,9 @@ class CobReports:
         self.browser.add_handler(HTTPNtlmAuthHandler.HTTPNtlmAuthHandler(passman))
 
         try:
-            resp = self.browser.open(f'{baseurl}/Reports')
-        except URLError:
-            raise AssertionError(f'COB Financial: Invalid username/password or {baseurl} is down.')
+            resp: mechanize.Response = self.browser.open(f'{baseurl}/Reports')
+        except URLError as err:
+            raise AssertionError(f'COB Financial: Invalid username/password or {baseurl} is down.') from err
 
         if resp.code != 200:
             raise AssertionError('COB Financial: Invalid username/password')
