@@ -294,7 +294,7 @@ class Axsis:
 
         soup = BeautifulSoup(response.content, "html.parser")
         if soup.find("input", {"name": "session_state"}) is None:
-            raise Exception("Invalid AXSIS username or password")
+            raise AssertionError("Invalid AXSIS username or password")
 
         headers = {
             'Origin': 'https://sts.atsol.com',
