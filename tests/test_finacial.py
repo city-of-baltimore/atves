@@ -12,7 +12,7 @@ def test_financial_invalid_user_pass():
         atves.financial.CobReports('test', 'test')
 
 
-@pytest.mark.vpn
+@pytest.mark.financial
 def test_financial_get_general_ledger_detail(cobreport_fixture):
     """Tests get_general_ledger_detail"""
     start_date = date(2021, 2, 1)

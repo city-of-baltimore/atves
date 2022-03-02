@@ -17,6 +17,7 @@ from atves.atves_schema import AtvesAmberTimeRejects, AtvesCamLocations, AtvesFi
 from atves.constants import OVERHEIGHT, REDLIGHT, SPEED
 
 
+@pytest.mark.conduent
 def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Testing _build_db_conduent_red_light"""
     engine = create_engine(conn_str, echo=True, future=True)
@@ -99,6 +100,7 @@ def test_atvesdb_build_db_conduent_red_light(atvesdb_fixture, atvesdb_fixture_no
         assert not ret.all()[0][1]
 
 
+@pytest.mark.conduent
 def test_atvesdb_build_db_conduent_overheight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Testing _build_db_conduent_overheight"""
     engine = create_engine(conn_str, echo=True, future=True)
@@ -129,6 +131,7 @@ def test_atvesdb_build_db_conduent_overheight(atvesdb_fixture, atvesdb_fixture_n
             assert len(effective_dates) > 8
 
 
+@pytest.mark.axsis
 def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Testing _build_db_speed_cameras"""
     engine = create_engine(conn_str, echo=True, future=True)
@@ -214,6 +217,7 @@ def test_atvesdb_build_db_speed_cameras(atvesdb_fixture, atvesdb_fixture_no_cred
         assert not ret.all()[0][1]
 
 
+@pytest.mark.conduent
 def test_get_cam_start_end(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Testing _get_cam_start_end"""
     engine = create_engine(conn_str, echo=True, future=True)
@@ -247,6 +251,7 @@ def test_get_cam_start_end(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, 
     assert end == date(2020, 1, 3)
 
 
+@pytest.mark.conduent
 def test_atvesdb_process_conduent_data_amber_time(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Testing process_conduent_data_amber_time"""
     engine = create_engine(conn_str, echo=True, future=True)
@@ -271,6 +276,8 @@ def test_atvesdb_process_conduent_data_amber_time(atvesdb_fixture, atvesdb_fixtu
         assert ret.count() > 30
 
 
+@pytest.mark.axsis
+@pytest.mark.conduent
 def test_atvesdb_process_traffic_count_data(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Testing process_traffic_count_data"""
     engine = create_engine(conn_str, echo=True, future=True)
@@ -289,6 +296,8 @@ def test_atvesdb_process_traffic_count_data(atvesdb_fixture, atvesdb_fixture_no_
         assert ret.count() > 100
 
 
+@pytest.mark.axsis
+@pytest.mark.conduent
 def test_atvesdb_process_violations(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Testing process_violations"""
     engine = create_engine(conn_str, echo=True, future=True)
@@ -329,7 +338,7 @@ def test_atvesdb_process_financials_overheight(atvesdb_fixture, atvesdb_fixture_
         assert ret.count() > 10
 
 
-@pytest.mark.vpn
+@pytest.mark.financial
 def test_atvesdb_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Test process_financials with REDLIGHT"""
     start_date = date(2021, 2, 1)
@@ -350,7 +359,7 @@ def test_atvesdb_process_financials_redlight(atvesdb_fixture, atvesdb_fixture_no
         assert ret.count() > 10
 
 
-@pytest.mark.vpn
+@pytest.mark.financial
 def test_atvesdb_process_financials_speed(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Test process_financials with SPEED"""
     start_date = date(2021, 2, 1)
@@ -371,6 +380,7 @@ def test_atvesdb_process_financials_speed(atvesdb_fixture, atvesdb_fixture_no_cr
         assert ret.count() > 10
 
 
+@pytest.mark.axsis
 def test_process_officer_actions(atvesdb_fixture, atvesdb_fixture_no_creds, conn_str, reset_database):
     """Test process_officer_actions"""
     start_date = date(2021, 11, 5)

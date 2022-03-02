@@ -15,6 +15,7 @@ def test_conduent_invalid_user_pass():
         atves.conduent.Conduent('test', 'test')
 
 
+@pytest.mark.conduent
 def test_conduent_get_location_by_id(conduent_fixture):
     """Tests get_location_by_id"""
     # Camera 1 is a red light cam, and camera 2003 is an overheight cam
@@ -36,6 +37,7 @@ def test_conduent_get_location_by_id(conduent_fixture):
         assert ret['status'] == 'Active'
 
 
+@pytest.mark.conduent
 def test_conduent_get_location_by_id_invalid(conduent_fixture):
     """Tests get_location_by_id with a bad id"""
     for cam_type in [atves.conduent.REDLIGHT, atves.conduent.OVERHEIGHT]:
@@ -57,6 +59,7 @@ def test_conduent_get_location_by_id_invalid(conduent_fixture):
         conduent_fixture.get_location_by_id(9999999999, 30)
 
 
+@pytest.mark.conduent
 def test_conduent_get_overheight_cameras(conduent_fixture):
     """Tests get_overheight_cameras"""
     ret = conduent_fixture.get_overheight_cameras()
@@ -66,6 +69,7 @@ def test_conduent_get_overheight_cameras(conduent_fixture):
     assert str(ret[0][1]) is not None
 
 
+@pytest.mark.conduent
 def test_conduent_get_deployment_data(conduent_fixture):
     """Tests get_deployment_data"""
 
@@ -103,6 +107,7 @@ def test_conduent_get_deployment_data(conduent_fixture):
         conduent_fixture.get_deployment_data(start_date.date(), end_date.date(), 30)
 
 
+@pytest.mark.conduent
 def test_conduent_get_amber_time_rejects_report(conduent_fixture):
     """Tests get_amber_time_rejects_report"""
     start_date = date(2020, 11, 1)
@@ -111,6 +116,7 @@ def test_conduent_get_amber_time_rejects_report(conduent_fixture):
     verify_dataframes_len_and_date(ret, 'VioDate', start_date, end_date)
 
 
+@pytest.mark.conduent
 def test_conduent_get_approval_by_review_date_details(conduent_fixture):
     """Tests get_approval_by_review_date_details"""
 
@@ -175,6 +181,7 @@ def test_conduent_get_approval_by_review_date_details(conduent_fixture):
         conduent_fixture.get_approval_by_review_date_details(start_date, end_date, 30)
 
 
+@pytest.mark.conduent
 def test_conduent_get_approval_summary_by_queue(conduent_fixture):
     """Tests get_approval_summary_by_queue"""
     start_date = date(2020, 11, 1)
@@ -213,6 +220,7 @@ def test_conduent_get_approval_summary_by_queue(conduent_fixture):
         conduent_fixture.get_approval_summary_by_queue(start_date, end_date, 30)
 
 
+@pytest.mark.conduent
 def test_conduent_get_client_summary_by_location(conduent_fixture):
     """Tests get_client_summary_by_location"""
     # We have to pull this report by day, so its slow
@@ -256,6 +264,7 @@ def test_conduent_get_client_summary_by_location(conduent_fixture):
         conduent_fixture.get_client_summary_by_location(start_date, end_date, 30)
 
 
+@pytest.mark.conduent
 def test_conduent_get_expired_by_location(conduent_fixture):
     """Tests get_expired_by_location"""
     start_date = date(2020, 11, 1)
@@ -274,6 +283,7 @@ def test_conduent_get_expired_by_location(conduent_fixture):
     assert ret is None
 
 
+@pytest.mark.conduent
 def test_conduent_get_in_city_vs_out_of_city(conduent_fixture):
     """Tests get_in_city_vs_out_of_city"""
     start_date = date(2020, 11, 1)
@@ -285,6 +295,7 @@ def test_conduent_get_in_city_vs_out_of_city(conduent_fixture):
     assert ret.at[0, 'OutState'] >= 5000
 
 
+@pytest.mark.conduent
 def test_conduent_get_straight_thru_vs_right_turn(conduent_fixture):
     """Tests get_straight_thru_vs_right_turn"""
     start_date = date(2020, 11, 1)
@@ -304,6 +315,7 @@ def test_conduent_get_straight_thru_vs_right_turn(conduent_fixture):
     assert ret is None
 
 
+@pytest.mark.conduent
 def test_conduent_get_traffic_counts_by_location(conduent_fixture):
     """Tests get_traffic_counts_by_location"""
     start_date = date(2020, 11, 1)
@@ -323,6 +335,7 @@ def test_conduent_get_traffic_counts_by_location(conduent_fixture):
     assert ret is None
 
 
+@pytest.mark.conduent
 def test_conduent_get_violations_issued_by_location(conduent_fixture):
     """Tests get_violations_issued_by_location"""
     start_date = date(2020, 11, 1)
@@ -331,6 +344,7 @@ def test_conduent_get_violations_issued_by_location(conduent_fixture):
     assert len(ret) > 5
 
 
+@pytest.mark.conduent
 def test_conduent_get_daily_self_test(conduent_fixture):
     """Tests get_daily_self_test"""
     start_date = date(2020, 11, 1)
@@ -339,6 +353,7 @@ def test_conduent_get_daily_self_test(conduent_fixture):
     verify_dataframes_len_and_date(ret, 'TestDate', start_date, end_date)
 
 
+@pytest.mark.conduent
 def test_conduent_get_pending_client_approval(conduent_fixture):
     """Tests get_pending_client_approval"""
     ret = conduent_fixture.get_pending_client_approval(atves.conduent.REDLIGHT)
