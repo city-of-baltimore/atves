@@ -79,18 +79,21 @@ class AtvesDatabase(DatabaseBaseClass):
         with self.engine.begin() as connection:
             Base.metadata.create_all(connection)
 
+        self.axsis_interface = None
         try:
             self.axsis_interface = Axsis(username=axsis_user, password=axsis_pass) \
                 if axsis_user and axsis_pass else None
         except AssertionError:
             logger.warning('Disabling Axsis functionality')
 
+        self.conduent_interface = None
         try:
             self.conduent_interface = Conduent(conduent_user, conduent_pass) \
                 if conduent_user and conduent_pass else None
         except AssertionError:
             logger.warning('Disabling Conduent functionality')
 
+        self.financial_interface = None
         try:
             self.financial_interface = CobReports(report_user, report_pass) \
                 if report_user and report_pass else None

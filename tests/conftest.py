@@ -126,8 +126,9 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if 'axsis' in item.keywords and not (config.getoption('--axsis-user') and config.getoption('--axsis-pass')):
             item.add_marker(skip_axsis)
-        if 'conduent' in item.keywords and not \
-                (config.getoption('--conduent-user') and config.getoption('--conduent-pass')):
+        if 'conduent' in item.keywords and \
+                not (config.getoption('--conduent-user') and config.getoption('--conduent-pass')):
             item.add_marker(skip_conduent)
-        if 'financial' in item.keywords and not (config.getoption('--report-user') and config.getoption('--report-pass')):
+        if 'financial' in item.keywords and \
+                not (config.getoption('--report-user') and config.getoption('--report-pass')):
             item.add_marker(skip_financial)

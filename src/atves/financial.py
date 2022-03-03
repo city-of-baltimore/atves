@@ -28,7 +28,7 @@ class CobReports:
         self.browser.add_handler(HTTPNtlmAuthHandler.HTTPNtlmAuthHandler(passman))
 
         try:
-            resp: mechanize.Response = self.browser.open(f'{baseurl}/Reports')
+            resp = self.browser.open(f'{baseurl}/Reports')  # pylint:disable=assignment-from-none
         except URLError as err:
             raise AssertionError(f'COB Financial: Invalid username/password or {baseurl} is down.') from err
 
