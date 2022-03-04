@@ -2,7 +2,18 @@
 # pylint:disable=protected-access
 from datetime import date
 
+import pytest
 
+import atves
+
+
+def test_axsis_invalid_user_pass():
+    """Tests the Axsis interface with an invalid username and password"""
+    with pytest.raises(AssertionError):
+        atves.axsis.Axsis('test', 'test')
+
+
+@pytest.mark.axsis
 def test_axsis_get_traffic_counts(axsis_fixture):
     """Test suite get_traffic_counts"""
     start_date = date(2020, 11, 1)
@@ -12,6 +23,7 @@ def test_axsis_get_traffic_counts(axsis_fixture):
     assert len(ret) > 150
 
 
+@pytest.mark.axsis
 def test_get_location_summary_by_lane(axsis_fixture):
     """Test get_location_summary_by_lane"""
     start_date = date(2021, 5, 3)
@@ -21,6 +33,7 @@ def test_get_location_summary_by_lane(axsis_fixture):
     assert len(ret) == 235
 
 
+@pytest.mark.axsis
 def test_axsis_get_reports(axsis_fixture):
     """Test suite _get_reports"""
     assert axsis_fixture._get_reports('ENFORCEMENT EXPIRE') == 183
@@ -28,6 +41,7 @@ def test_axsis_get_reports(axsis_fixture):
     assert axsis_fixture._get_reports('NOTAREALREPORT') is None
 
 
+@pytest.mark.axsis
 def test_axsis_get_reports_detail(axsis_fixture):
     """Test suite get_reports_detail"""
     ret = axsis_fixture.get_reports_detail('ENFORCEMENT EXPIRE')
@@ -41,6 +55,7 @@ def test_axsis_get_reports_detail(axsis_fixture):
     assert axsis_fixture.get_reports_detail('NOTAREALREPORT') is None
 
 
+@pytest.mark.axsis
 def test_get_location_info(axsis_fixture):
     """Test suite get_location_info"""
     assert axsis_fixture.get_location_info('BALP056') == '2800 BLK REISTERSTOWN RD EB'
@@ -49,6 +64,7 @@ def test_get_location_info(axsis_fixture):
     assert axsis_fixture.get_location_info('INVALID') is None
 
 
+@pytest.mark.axsis
 def test_get_officer_actions(axsis_fixture):
     """Test suite get_officer_actions"""
     res = axsis_fixture.get_officer_actions(date(2021, 11, 5), date(2021, 11, 8))

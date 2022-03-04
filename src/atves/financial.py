@@ -3,6 +3,7 @@ import re
 from datetime import date
 from io import StringIO
 from typing import Any, Dict, List, Tuple, Union
+from urllib.error import URLError
 
 import mechanize  # type: ignore
 import pandas as pd  # type: ignore
@@ -26,8 +27,13 @@ class CobReports:
         passman.add_password(None, 'https://cobrpt02.rsm.cloud', username, password)
         self.browser.add_handler(HTTPNtlmAuthHandler.HTTPNtlmAuthHandler(passman))
 
-        if self.browser.open(f'{baseurl}/Reports').code != 200:
-            raise AssertionError('Invalid username/password')
+        try:
+            resp = self.browser.open(f'{baseurl}/Reports')  # pylint:disable=assignment-from-none
+        except URLError as err:
+            raise AssertionError(f'COB Financial: Invalid username/password or {baseurl} is down.') from err
+
+        if resp.code != 200:
+            raise AssertionError('COB Financial: Invalid username/password')
 
         self.baseurl = baseurl
 

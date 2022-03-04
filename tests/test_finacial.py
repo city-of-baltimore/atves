@@ -1,9 +1,18 @@
 """Tests test_finacial.py"""
 from datetime import date
+
 import pytest
 
+import atves
 
-@pytest.mark.vpn
+
+def test_financial_invalid_user_pass():
+    """Tests the Financial interface with an invalid username and password"""
+    with pytest.raises(AssertionError):
+        atves.financial.CobReports('test', 'test')
+
+
+@pytest.mark.financial
 def test_financial_get_general_ledger_detail(cobreport_fixture):
     """Tests get_general_ledger_detail"""
     start_date = date(2021, 2, 1)

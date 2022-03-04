@@ -10,12 +10,12 @@ from atves.atves_schema import AtvesAmberTimeRejects, AtvesFinancial, AtvesTraff
 
 def pytest_addoption(parser):
     """Pytest custom arguments"""
-    parser.addoption('--axsis-user', action='store')
-    parser.addoption('--axsis-pass', action='store')
-    parser.addoption('--conduent-user', action='store')
-    parser.addoption('--conduent-pass', action='store')
-    parser.addoption('--report-user', action='store')
-    parser.addoption('--report-pass', action='store')
+    parser.addoption('--axsis-user', action='store', default=None)
+    parser.addoption('--axsis-pass', action='store', default=None)
+    parser.addoption('--conduent-user', action='store', default=None)
+    parser.addoption('--conduent-pass', action='store', default=None)
+    parser.addoption('--report-user', action='store', default=None)
+    parser.addoption('--report-pass', action='store', default=None)
     parser.addoption('--runvpntests', action='store_true', help='Run financial tests that require the VPN')
 
 
@@ -58,18 +58,24 @@ def fixture_report_password(request):
 @pytest.fixture(name='conduent_fixture')
 def fixture_conduent(conduent_username, conduent_password):
     """Conduent object"""
+    if not (conduent_username and conduent_password):
+        raise ValueError('Conduent username and password required')
     return atves.conduent.Conduent(conduent_username, conduent_password)
 
 
 @pytest.fixture(name='axsis_fixture')
 def fixture_axsis(axsis_username, axsis_password):
     """Axsis object"""
+    if not (axsis_username and axsis_password):
+        raise ValueError('Axsis username and password required')
     return atves.axsis.Axsis(axsis_username, axsis_password)
 
 
 @pytest.fixture(name='cobreport_fixture')
 def fixture_cobreport(report_username, report_password):
     """CobReport object"""
+    if not (report_username and report_password):
+        raise ValueError('Financial login required')
     return atves.financial.CobReports(report_username, report_password)
 
 
@@ -112,11 +118,17 @@ def fixture_reset_database(conn_str):
 
 
 def pytest_collection_modifyitems(config, items):
-    """Enables the --runvpntests flag that enables some financial tests that require a VPN connection"""
-    if config.getoption("--runvpntests"):
-        # --runvpntests given in cli: do not skip slow tests
-        return
-    skip_vpn = pytest.mark.skip(reason="need --runvpntests option to run")
+    """Skips tests when the creds are not provided"""
+    skip_axsis = pytest.mark.skip(reason='Skipping because --axsis-user and --axsis-pass not supplied')
+    skip_conduent = pytest.mark.skip(reason='Skipping because --conduent-user and --conduent-pass not supplied')
+    skip_financial = pytest.mark.skip(reason='Skipping because --report-user and --report-pass not supplied')
+
     for item in items:
-        if "vpn" in item.keywords:
-            item.add_marker(skip_vpn)
+        if 'axsis' in item.keywords and not (config.getoption('--axsis-user') and config.getoption('--axsis-pass')):
+            item.add_marker(skip_axsis)
+        if 'conduent' in item.keywords and \
+                not (config.getoption('--conduent-user') and config.getoption('--conduent-pass')):
+            item.add_marker(skip_conduent)
+        if 'financial' in item.keywords and \
+                not (config.getoption('--report-user') and config.getoption('--report-pass')):
+            item.add_marker(skip_financial)
