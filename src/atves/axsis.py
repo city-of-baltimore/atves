@@ -250,9 +250,9 @@ class Axsis:
             # There is not a 'Reject Reason Summary' sheet... probably an incomplete sheet
             return {'0': pd.DataFrame(), '1': pd.DataFrame()}
 
-        return {'0': pd.read_excel(response.content, parse_dates=['Action Date'], dtype=dtypes, header=1, skipfooter=1,
+        return {'0': pd.read_excel(response.content, parse_dates=['Action Date'], dtype=dtypes, header=2, skipfooter=1,
                                    names=['Action Date', 'Queue', 'Officer Name', 'Reviewed', 'Accepted', 'Rejected',
-                                          'Percent Accepted', 'Percent Rejected']),
+                                          'Percent Accepted', 'NA', 'Percent Rejected']),
                 '1': reasons}
 
     @retry(wait=wait_random_exponential(multiplier=1, max=60), stop=stop_after_attempt(7), reraise=True,
